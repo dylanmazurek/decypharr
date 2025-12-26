@@ -420,7 +420,7 @@ func (tb *Torbox) DeleteTorrent(torrentId string) error {
 		return err
 	}
 
-	req, _ := http.NewRequest(http.MethodDelete, url, bytes.NewBuffer(jsonPayload))
+	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(jsonPayload))
 	_, err = tb.client.MakeRequest(req)
 	if err != nil {
 		return err
