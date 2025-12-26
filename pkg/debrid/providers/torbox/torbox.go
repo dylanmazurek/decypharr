@@ -414,7 +414,7 @@ func (tb *Torbox) CheckStatus(torrent *types.Torrent) (*types.Torrent, error) {
 func (tb *Torbox) DeleteTorrent(torrentId string) error {
 	url := fmt.Sprintf("%s/api/torrents/controltorrent", tb.Host)
 
-	payload := map[string]string{"torrent_id": torrentId, "action": "delete"}
+	payload := map[string]string{"torrent_id": torrentId, "operation": "delete"}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return err
