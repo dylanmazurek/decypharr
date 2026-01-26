@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-co-op/gocron/v2"
-	"github.com/sirrobot01/decypharr/internal/utils"
+	"github.com/dylanmazurek/decypharr/internal/utils"
 )
 
 func (s *Store) addToQueue(importReq *ImportRequest) error {

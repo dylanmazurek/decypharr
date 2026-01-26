@@ -1,5 +1,5 @@
 # Stage 1: Build binaries
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine as builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine as builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -36,10 +36,10 @@ ARG VERSION=0.0.0
 ARG CHANNEL=dev
 
 LABEL version = "${VERSION}-${CHANNEL}"
-LABEL org.opencontainers.image.source = "https://github.com/sirrobot01/decypharr"
+LABEL org.opencontainers.image.source = "https://github.com/dylanmazurek/decypharr"
 LABEL org.opencontainers.image.title = "decypharr"
 LABEL org.opencontainers.image.authors = "sirrobot01"
-LABEL org.opencontainers.image.documentation = "https://github.com/sirrobot01/decypharr/blob/main/README.md"
+LABEL org.opencontainers.image.documentation = "https://github.com/dylanmazurek/decypharr/blob/main/README.md"
 
 # Install dependencies including rclone
 RUN apk add --no-cache fuse3 ca-certificates su-exec shadow curl unzip && \

@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirrobot01/decypharr/internal/config"
+	"github.com/dylanmazurek/decypharr/internal/config"
 )
 
 type Accounts struct {

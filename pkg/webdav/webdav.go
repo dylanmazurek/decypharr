@@ -4,10 +4,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/sirrobot01/decypharr/internal/config"
-	"github.com/sirrobot01/decypharr/pkg/store"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -16,6 +12,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dylanmazurek/decypharr/internal/config"
+	"github.com/dylanmazurek/decypharr/pkg/store"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 //go:embed templates/*
@@ -66,6 +67,7 @@ var (
 			if unit == "bytes" {
 				return fmt.Sprintf("%.0f %s", size, unit)
 			}
+
 			return fmt.Sprintf("%.2f %s", size, unit)
 		},
 		"hasSuffix": strings.HasSuffix,

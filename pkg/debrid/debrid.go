@@ -7,17 +7,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirrobot01/decypharr/internal/config"
-	"github.com/sirrobot01/decypharr/internal/logger"
-	"github.com/sirrobot01/decypharr/internal/utils"
-	"github.com/sirrobot01/decypharr/pkg/arr"
-	"github.com/sirrobot01/decypharr/pkg/debrid/providers/alldebrid"
-	"github.com/sirrobot01/decypharr/pkg/debrid/providers/debridlink"
-	"github.com/sirrobot01/decypharr/pkg/debrid/providers/realdebrid"
-	"github.com/sirrobot01/decypharr/pkg/debrid/providers/torbox"
-	debridStore "github.com/sirrobot01/decypharr/pkg/debrid/store"
-	"github.com/sirrobot01/decypharr/pkg/debrid/types"
-	"github.com/sirrobot01/decypharr/pkg/rclone"
+	"github.com/dylanmazurek/decypharr/internal/config"
+	"github.com/dylanmazurek/decypharr/internal/logger"
+	"github.com/dylanmazurek/decypharr/internal/utils"
+	"github.com/dylanmazurek/decypharr/pkg/arr"
+	"github.com/dylanmazurek/decypharr/pkg/debrid/providers/alldebrid"
+	"github.com/dylanmazurek/decypharr/pkg/debrid/providers/debridlink"
+	"github.com/dylanmazurek/decypharr/pkg/debrid/providers/torbox"
+	debridStore "github.com/dylanmazurek/decypharr/pkg/debrid/store"
+	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
+	"github.com/dylanmazurek/decypharr/pkg/rclone"
 )
 
 type Debrid struct {
@@ -231,8 +230,6 @@ func (d *Storage) FilterClients(filter func(types.Client) bool) map[string]types
 
 func createDebridClient(dc config.Debrid) (types.Client, error) {
 	switch dc.Name {
-	case "realdebrid":
-		return realdebrid.New(dc)
 	case "torbox":
 		return torbox.New(dc)
 	case "debridlink":
@@ -240,7 +237,7 @@ func createDebridClient(dc config.Debrid) (types.Client, error) {
 	case "alldebrid":
 		return alldebrid.New(dc)
 	default:
-		return realdebrid.New(dc)
+		return nil, fmt.Errorf("unknown debrid client: %s", dc.Name)
 	}
 }
 

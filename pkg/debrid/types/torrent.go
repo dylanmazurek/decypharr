@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirrobot01/decypharr/internal/logger"
-	"github.com/sirrobot01/decypharr/internal/utils"
-	"github.com/sirrobot01/decypharr/pkg/arr"
+	"github.com/dylanmazurek/decypharr/internal/logger"
+	"github.com/dylanmazurek/decypharr/internal/utils"
+	"github.com/dylanmazurek/decypharr/pkg/arr"
 )
 
 type Torrent struct {

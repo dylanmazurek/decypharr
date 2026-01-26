@@ -1,0 +1,17 @@
+# https://taskfile.dev
+
+version: '3'
+
+dotenv:
+  - .env
+
+tasks:
+  build:
+    desc: Build the decypharr binary
+    cmds:
+      - go build -o bin/decypharr main.go
+    
+  run:
+    desc: Run the decypharr application
+    cmds:
+      - go run main.go
