@@ -12,9 +12,9 @@ import (
 	"github.com/dylanmazurek/decypharr/internal/logger"
 	"github.com/dylanmazurek/decypharr/pkg/qbit"
 	"github.com/dylanmazurek/decypharr/pkg/server"
-	"github.com/dylanmazurek/decypharr/pkg/store"
 	"github.com/dylanmazurek/decypharr/pkg/version"
 	"github.com/dylanmazurek/decypharr/pkg/web"
+	"github.com/dylanmazurek/decypharr/pkg/wire"
 )
 
 func Start(ctx context.Context) error {
@@ -64,7 +64,7 @@ func Start(ctx context.Context) error {
 		reset := func() {
 			// Reset the store and services
 			qb.Reset()
-			store.Reset()
+			wire.Reset()
 			// refresh GC
 			runtime.GC()
 		}
@@ -130,11 +130,6 @@ func startServices(ctx context.Context, cancelSvc context.CancelFunc, srv *serve
 
 	safeGo(func() error {
 		return srv.Start(ctx)
-	})
-
-	safeGo(func() error {
-		store.Get().StartWorkers(ctx)
-		return nil
 	})
 
 	go func() {

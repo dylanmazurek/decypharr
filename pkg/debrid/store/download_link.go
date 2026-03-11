@@ -3,12 +3,13 @@ package store
 import (
 	"fmt"
 
+	"github.com/dylanmazurek/decypharr/internal/utils"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
 )
 
 func (c *Cache) GetDownloadLink(torrentName, filename, fileLink string) (string, error) {
 	// Check link cache
-	if dl, err := c.checkDownloadLink(fileLink); dl != "" && err == nil {
+	if dl, err := c.checkDownloadLink(fileLink); err == nil && !dl.Empty() {
 		return dl, nil
 	}
 
@@ -23,25 +24,26 @@ func (c *Cache) GetDownloadLink(torrentName, filename, fileLink string) (string,
 	return dl.DownloadLink, err
 }
 
-func (c *Cache) fetchDownloadLink(torrentName, filename, fileLink string) (*types.DownloadLink, error) {
+func (c *Cache) fetchDownloadLink(torrentName, filename, fileLink string) (types.DownloadLink, error) {
+	emptyDownloadLink := types.DownloadLink{}
 	ct := c.GetTorrentByName(torrentName)
 	if ct == nil {
-		return nil, fmt.Errorf("torrent not found")
+		return emptyDownloadLink, fmt.Errorf("torrent not found")
 	}
 	file, ok := ct.GetFile(filename)
 	if !ok {
-		return nil, fmt.Errorf("file %s not found in torrent %s", filename, torrentName)
+		return emptyDownloadLink, fmt.Errorf("file %s not found in torrent %s", filename, torrentName)
 	}
 
 	if file.Link == "" {
 		// file link is empty, refresh the torrent to get restricted links
 		ct = c.refreshTorrent(file.TorrentId) // Refresh the torrent from the debrid
 		if ct == nil {
-			return nil, fmt.Errorf("failed to refresh torrent")
+			return emptyDownloadLink, fmt.Errorf("failed to refresh torrent")
 		} else {
 			file, ok = ct.GetFile(filename)
 			if !ok {
-				return nil, fmt.Errorf("file %s not found in refreshed torrent %s", filename, torrentName)
+				return emptyDownloadLink, fmt.Errorf("file %s not found in refreshed torrent %s", filename, torrentName)
 			}
 		}
 	}
@@ -56,12 +58,9 @@ func (c *Cache) fetchDownloadLink(torrentName, filename, fileLink string) (*type
 	if err != nil {
 		return nil, fmt.Errorf("failed to get download link: %w", err)
 	}
-	if downloadLink == nil {
-		return nil, fmt.Errorf("download link is empty")
+	if downloadLink.Empty() {
+		return emptyDownloadLink, fmt.Errorf("download link is empty")
 	}
-
-	// Set link to cache
-	go c.client.Accounts().SetDownloadLink(fileLink, downloadLink)
 	return downloadLink, nil
 }
 
@@ -72,28 +71,33 @@ func (c *Cache) GetFileDownloadLinks(t CachedTorrent) {
 	}
 }
 
-func (c *Cache) checkDownloadLink(link string) (string, error) {
-
-	dl, err := c.client.Accounts().GetDownloadLink(link)
+func (c *Cache) checkDownloadLink(link string) (types.DownloadLink, error) {
+	dl, err := c.client.AccountManager().GetDownloadLink(link)
 	if err != nil {
-		return "", err
+		return dl, err
 	}
 	if !c.downloadLinkIsInvalid(dl.DownloadLink) {
-		return dl.DownloadLink, nil
+		return dl, nil
 	}
-	return "", fmt.Errorf("download link not found for %s", link)
+	return types.DownloadLink{}, fmt.Errorf("download link not found for %s", link)
 }
 
-func (c *Cache) MarkDownloadLinkAsInvalid(link, downloadLink, reason string) {
-	c.invalidDownloadLinks.Store(downloadLink, reason)
+func (c *Cache) MarkDownloadLinkAsInvalid(downloadLink types.DownloadLink, reason string) {
+	c.invalidDownloadLinks.Store(downloadLink.DownloadLink, reason)
 	// Remove the download api key from active
 	if reason == "bandwidth_exceeded" {
 		// Disable the account
-		_, account, err := c.client.Accounts().GetDownloadLinkWithAccount(link)
+		accountManager := c.client.AccountManager()
+		account, err := accountManager.GetAccount(downloadLink.Token)
 		if err != nil {
+			c.logger.Error().Err(err).Str("token", utils.Mask(downloadLink.Token)).Msg("Failed to get account to disable")
 			return
 		}
-		c.client.Accounts().Disable(account)
+		if account == nil {
+			c.logger.Error().Str("token", utils.Mask(downloadLink.Token)).Msg("Account not found to disable")
+			return
+		}
+		accountManager.Disable(account)
 	}
 }
 
@@ -115,5 +119,10 @@ func (c *Cache) GetDownloadByteRange(torrentName, filename string) (*[2]int64, e
 }
 
 func (c *Cache) GetTotalActiveDownloadLinks() int {
-	return c.client.Accounts().GetLinksCount()
+	total := 0
+	allAccounts := c.client.AccountManager().Active()
+	for _, acc := range allAccounts {
+		total += acc.DownloadLinksCount()
+	}
+	return total
 }

@@ -228,7 +228,6 @@ class ConfigManager {
                         <div class="form-control flex-1">
                             <label class="label" for="debrid[${index}].download_api_keys">
                                 <span class="label-text font-medium">Download API Keys</span>
-                                <span class="badge badge-ghost badge-sm">Optional</span>
                             </label>
                             <div class="password-toggle-container">
                                 <textarea class="textarea textarea-bordered has-toggle font-mono h-full min-h-[200px]" 
@@ -245,7 +244,7 @@ class ConfigManager {
                         </div>
                     </div>
                     <div class="space-y-4">
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div class="form-control">
                             <label class="label" for="debrid[${index}].folder">
                                 <span class="label-text font-medium">Mount/Rclone Folder</span>
@@ -255,17 +254,6 @@ class ConfigManager {
                                    placeholder="/mnt/remote/realdebrid/__all__" required>
                             <div class="label">
                                 <span class="label-text-alt">Path where debrid files are mounted</span>
-                            </div>
-                        </div>
-                        <div class="form-control">
-                            <label class="label" for="debrid[${index}].rate_limit">
-                                <span class="label-text font-medium">Rate Limit</span>
-                            </label>
-                            <input type="text" class="input input-bordered" 
-                                   name="debrid[${index}].rate_limit" id="debrid[${index}].rate_limit" 
-                                   placeholder="250/minute" value="250/minute">
-                            <div class="label">
-                                <span class="label-text-alt">API rate limit for this service</span>
                             </div>
                         </div>
                         <div class="form-control">
@@ -279,8 +267,21 @@ class ConfigManager {
                               <div class="label">
                                   <span class="label-text-alt">Custom mount path for this debrid service. If empty, uses global rclone mount path.</span>
                               </div>
-                          </div>
-
+                        </div>
+                        
+                    </div>
+                    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div class="form-control">
+                            <label class="label" for="debrid[${index}].rate_limit">
+                                <span class="label-text font-medium">Rate Limit</span>
+                            </label>
+                            <input type="text" class="input input-bordered" 
+                                   name="debrid[${index}].rate_limit" id="debrid[${index}].rate_limit" 
+                                   placeholder="250/minute" value="250/minute">
+                            <div class="label">
+                                <span class="label-text-alt">API rate limit for this service</span>
+                            </div>
+                        </div>
                         <div class="form-control">
                             <label class="label" for="debrid[${index}].proxy">
                                 <span class="label-text font-medium">Proxy</span>
@@ -290,6 +291,17 @@ class ConfigManager {
                                    placeholder="socks4, socks5, https proxy">
                             <div class="label">
                                 <span class="label-text-alt">This proxy is used for this debrid account</span>
+                            </div>
+                        </div>
+                        <div class="form-control">
+                            <label class="label" for="debrid[${index}].minimum_free_slot">
+                                <span class="label-text font-medium">Minimum Free Slot</span>
+                            </label>
+                            <input type="number" class="input input-bordered" 
+                                   name="debrid[${index}].minimum_free_slot" id="debrid[${index}].minimum_free_slot" 
+                                   placeholder="1" value="1">
+                            <div class="label">
+                                <span class="label-text-alt">Minimum free slot for this debrid</span>
                             </div>
                         </div>
                     </div>
@@ -840,7 +852,7 @@ class ConfigManager {
 
                     <input type="hidden" name="arr[${index}].source" value="${data.source || ''}">
 
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div class="form-control">
                             <label class="label" for="arr[${index}].name">
                                 <span class="label-text font-medium">Service Name</span>
@@ -875,9 +887,7 @@ class ConfigManager {
                                 </button>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                        
                         <div class="form-control">
                             <label class="label" for="arr[${index}].selected_debrid">
                                 <span class="label-text font-medium">Preferred Debrid Service</span>
@@ -893,33 +903,31 @@ class ConfigManager {
                                 <span class="label-text-alt">Which debrid service this Arr should prefer</span>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="flex flex-col justify-end">
-                            <div class="grid grid-cols-3 gap-2">
-                                <div class="form-control">
-                                    <label class="label cursor-pointer justify-start gap-2">
-                                        <input type="checkbox" class="checkbox checkbox-sm" 
-                                               name="arr[${index}].cleanup" id="arr[${index}].cleanup">
-                                        <span class="label-text text-sm">Cleanup Queue</span>
-                                    </label>
-                                </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="form-control">
+                            <label class="label cursor-pointer justify-start gap-2">
+                                <input type="checkbox" class="checkbox checkbox-sm" 
+                                       name="arr[${index}].cleanup" id="arr[${index}].cleanup">
+                                <span class="label-text text-sm">Cleanup Queue</span>
+                            </label>
+                        </div>
 
-                                <div class="form-control">
-                                    <label class="label cursor-pointer justify-start gap-2">
-                                        <input type="checkbox" class="checkbox checkbox-sm" 
-                                               name="arr[${index}].skip_repair" id="arr[${index}].skip_repair">
-                                        <span class="label-text text-sm">Skip Repair</span>
-                                    </label>
-                                </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer justify-start gap-2">
+                                <input type="checkbox" class="checkbox checkbox-sm" 
+                                       name="arr[${index}].skip_repair" id="arr[${index}].skip_repair">
+                                <span class="label-text text-sm">Skip Repair</span>
+                            </label>
+                        </div>
 
-                                <div class="form-control">
-                                    <label class="label cursor-pointer justify-start gap-2">
-                                        <input type="checkbox" class="checkbox checkbox-sm" 
-                                               name="arr[${index}].download_uncached" id="arr[${index}].download_uncached">
-                                        <span class="label-text text-sm">Download Uncached</span>
-                                    </label>
-                                </div>
-                            </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer justify-start gap-2">
+                                <input type="checkbox" class="checkbox checkbox-sm" 
+                                       name="arr[${index}].download_uncached" id="arr[${index}].download_uncached">
+                                <span class="label-text text-sm">Download Uncached</span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -1027,6 +1035,7 @@ class ConfigManager {
             min_file_size: document.getElementById('minFileSize').value,
             max_file_size: document.getElementById('maxFileSize').value,
             remove_stalled_after: document.getElementById('removeStalledAfter').value,
+            callback_url: document.getElementById('callbackUrl').value,
 
             // Debrid configurations
             debrids: this.collectDebridConfigs(),
@@ -1051,6 +1060,7 @@ class ConfigManager {
                 api_key: document.querySelector(`[name="debrid[${i}].api_key"]`).value,
                 folder: document.querySelector(`[name="debrid[${i}].folder"]`).value,
                 rate_limit: document.querySelector(`[name="debrid[${i}].rate_limit"]`).value,
+                minimum_free_slot: parseInt(document.querySelector(`[name="debrid[${i}].minimum_free_slot"]`).value) || 0,
                 rclone_mount_path: document.querySelector(`[name="debrid[${i}].rclone_mount_path"]`).value,
                 proxy: document.querySelector(`[name="debrid[${i}].proxy"]`).value,
                 download_uncached: document.querySelector(`[name="debrid[${i}].download_uncached"]`).checked,
@@ -1179,15 +1189,22 @@ class ConfigManager {
 
         return {
             enabled: getElementValue('enabled', false),
+            rc_port: getElementValue('rc_port', "5572"),
             mount_path: getElementValue('mount_path'),
             buffer_size: getElementValue('buffer_size'),
             cache_dir: getElementValue('cache_dir'),
+            transfers: getElementValue('transfers', 8),
             vfs_cache_mode: getElementValue('vfs_cache_mode', 'off'),
             vfs_cache_max_age: getElementValue('vfs_cache_max_age', '1h'),
             vfs_cache_max_size: getElementValue('vfs_cache_max_size'),
             vfs_cache_poll_interval: getElementValue('vfs_cache_poll_interval', '1m'),
             vfs_read_chunk_size: getElementValue('vfs_read_chunk_size', '128M'),
             vfs_read_chunk_size_limit: getElementValue('vfs_read_chunk_size_limit', 'off'),
+            vfs_cache_min_free_space: getElementValue('vfs_cache_min_free_space', ''),
+            vfs_fast_fingerprint: getElementValue('vfs_fast_fingerprint', false),
+            vfs_read_chunk_streams: getElementValue('vfs_read_chunk_streams', 0),
+            use_mmap: getElementValue('use_mmap', false),
+            async_read: getElementValue('async_read', true),
             uid: getElementValue('uid', 0),
             gid: getElementValue('gid', 0),
             umask: getElementValue('umask', ''),

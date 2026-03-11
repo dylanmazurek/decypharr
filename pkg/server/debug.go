@@ -7,13 +7,13 @@ import (
 
 	"github.com/dylanmazurek/decypharr/internal/request"
 	debridTypes "github.com/dylanmazurek/decypharr/pkg/debrid/types"
-	"github.com/dylanmazurek/decypharr/pkg/store"
+	"github.com/dylanmazurek/decypharr/pkg/wire"
 	"github.com/go-chi/chi/v5"
 )
 
 func (s *Server) handleIngests(w http.ResponseWriter, r *http.Request) {
 	ingests := make([]debridTypes.IngestData, 0)
-	_store := store.Get()
+	_store := wire.Get()
 	debrids := _store.Debrid()
 	if debrids == nil {
 		http.Error(w, "Debrid service is not enabled", http.StatusInternalServerError)
@@ -43,7 +43,7 @@ func (s *Server) handleIngestsByDebrid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_store := store.Get()
+	_store := wire.Get()
 	debrids := _store.Debrid()
 
 	if debrids == nil {
@@ -93,22 +93,20 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		"go_version": runtime.Version(),
 	}
 
-	debrids := store.Get().Debrid()
-	if debrids == nil {
-		request.JSONResponse(w, stats, http.StatusOK)
-		return
-	}
-	clients := debrids.Clients()
-	caches := debrids.Caches()
-	debridStats := make([]debridTypes.Stats, 0)
-	for debridName, client := range clients {
-		debridStat := debridTypes.Stats{}
-		libraryStat := debridTypes.LibraryStats{}
-		profile, err := client.GetProfile()
-		if err != nil {
-			s.logger.Error().Err(err).Str("debrid", debridName).Msg("Failed to get debrid profile")
-			profile = &debridTypes.Profile{
-				Name: debridName,
+	debrids := wire.Get().Debrid()
+	if debrids != nil {
+		clients := debrids.Clients()
+		caches := debrids.Caches()
+		debridStats := make([]debridTypes.Stats, 0)
+		for debridName, client := range clients {
+			debridStat := debridTypes.Stats{}
+			libraryStat := debridTypes.LibraryStats{}
+			profile, err := client.GetProfile()
+			if err != nil {
+				s.logger.Error().Err(err).Str("debrid", debridName).Msg("Failed to get debrid profile")
+				profile = &debridTypes.Profile{
+					Name: debridName,
+				}
 			}
 		}
 

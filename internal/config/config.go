@@ -80,6 +80,7 @@ type Config struct {
 	Auth               *Auth       `json:"-"`
 	DiscordWebhook     string      `json:"discord_webhook_url,omitempty"`
 	RemoveStalledAfter string      `json:"remove_stalled_after,omitzero"`
+	CallbackURL        string      `json:"callback_url,omitempty"`
 }
 
 func (c *Config) JsonFile() string {
@@ -235,6 +236,10 @@ func (c *Config) IsSizeAllowed(size int64) bool {
 	}
 
 	return true
+}
+
+func (c *Config) SecretKey() string {
+	return cmp.Or(os.Getenv("DECYPHARR_SECRET_KEY"), "\"wqj(v%lj*!-+kf@4&i95rhh_!5_px5qnuwqbr%cjrvrozz_r*(\"")
 }
 
 func (c *Config) GetAuth() *Auth {

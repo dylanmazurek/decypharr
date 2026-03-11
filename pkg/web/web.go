@@ -1,14 +1,14 @@
 package web
 
 import (
-	"cmp"
 	"embed"
+	"html/template"
+
+	"github.com/dylanmazurek/decypharr/internal/config"
+	"github.com/dylanmazurek/decypharr/internal/logger"
+	"github.com/dylanmazurek/decypharr/pkg/wire"
 	"github.com/gorilla/sessions"
 	"github.com/rs/zerolog"
-	"github.com/dylanmazurek/decypharr/internal/logger"
-	"github.com/dylanmazurek/decypharr/pkg/store"
-	"html/template"
-	"os"
 )
 
 var restartFunc func()
@@ -60,10 +60,11 @@ type Web struct {
 	logger    zerolog.Logger
 	cookie    *sessions.CookieStore
 	templates *template.Template
-	torrents  *store.TorrentStorage
+	torrents  *wire.TorrentStorage
 }
 
 func New() *Web {
+	cfg := config.Get()
 	templates := template.Must(template.ParseFS(
 		content,
 		"templates/layout.html",
@@ -75,8 +76,7 @@ func New() *Web {
 		"templates/login.html",
 		"templates/register.html",
 	))
-	secretKey := cmp.Or(os.Getenv("DECYPHARR_SECRET_KEY"), "\"wqj(v%lj*!-+kf@4&i95rhh_!5_px5qnuwqbr%cjrvrozz_r*(\"")
-	cookieStore := sessions.NewCookieStore([]byte(secretKey))
+	cookieStore := sessions.NewCookieStore([]byte(cfg.SecretKey()))
 	cookieStore.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   86400 * 7,
@@ -86,6 +86,6 @@ func New() *Web {
 		logger:    logger.New("ui"),
 		templates: templates,
 		cookie:    cookieStore,
-		torrents:  store.Get().Torrents(),
+		torrents:  wire.Get().Torrents(),
 	}
 }

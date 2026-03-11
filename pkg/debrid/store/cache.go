@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"cmp"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,7 +17,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dylanmazurek/decypharr/pkg/debrid/common"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
+	"github.com/puzpuzpuz/xsync/v4"
 
 	"encoding/json"
 	_ "time/tzdata"
@@ -70,12 +74,11 @@ type RepairRequest struct {
 
 type Cache struct {
 	dir    string
-	client types.Client
+	client common.Client
 	logger zerolog.Logger
 
-	torrents             *torrentCache
-	invalidDownloadLinks sync.Map
-	folderNaming         WebDavFolderNaming
+	torrents     *torrentCache
+	folderNaming WebDavFolderNaming
 
 	listingDebouncer *utils.Debouncer[bool]
 
@@ -129,6 +132,18 @@ func NewDebridCache(dc config.Debrid, client types.Client) *Cache {
 	}
 
 	_log := logger.New(fmt.Sprintf("%s-webdav", client.Name()))
+	transport := &http.Transport{
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		MaxIdleConns:          10,
+		MaxIdleConnsPerHost:   2,
+	}
+	httpClient := &http.Client{
+		Transport: transport,
+		Timeout:   0,
+	}
+
 	c := &Cache{
 		dir: filepath.Join(cfg.Path, "cache", dc.Name),
 
@@ -141,7 +156,12 @@ func NewDebridCache(dc config.Debrid, client types.Client) *Cache {
 
 		config: dc,
 
-		ready: make(chan struct{}),
+		ready:                make(chan struct{}),
+		httpClient:           httpClient,
+		invalidDownloadLinks: xsync.NewMap[string, string](),
+		repairRequest:        xsync.NewMap[string, *reInsertRequest](),
+		failedToReinsert:     xsync.NewMap[string, struct{}](),
+		repairChan:           make(chan RepairRequest, 100), // Initialize the repair channel, max 100 requests buffered
 	}
 
 	c.listingDebouncer = utils.NewDebouncer[bool](100*time.Millisecond, func(refreshRclone bool) {
@@ -711,7 +731,7 @@ func (c *Cache) Add(t *types.Torrent) error {
 
 }
 
-func (c *Cache) Client() types.Client {
+func (c *Cache) Client() common.Client {
 	return c.client
 }
 
@@ -866,4 +886,8 @@ func (c *Cache) Logger() zerolog.Logger {
 
 func (c *Cache) GetConfig() config.Debrid {
 	return c.config
+}
+
+func (c *Cache) Download(req *http.Request) (*http.Response, error) {
+	return c.httpClient.Do(req)
 }

@@ -1,4 +1,4 @@
-package store
+package wire
 
 import (
 	"bytes"
@@ -6,15 +6,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/dylanmazurek/decypharr/internal/request"
-	"github.com/dylanmazurek/decypharr/internal/utils"
-	"github.com/dylanmazurek/decypharr/pkg/arr"
-	debridTypes "github.com/dylanmazurek/decypharr/pkg/debrid/types"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/dylanmazurek/decypharr/internal/config"
+	"github.com/dylanmazurek/decypharr/internal/request"
+	"github.com/dylanmazurek/decypharr/internal/utils"
+	"github.com/dylanmazurek/decypharr/pkg/arr"
+	debridTypes "github.com/dylanmazurek/decypharr/pkg/debrid/types"
+	"github.com/google/uuid"
 )
 
 type ImportType string
@@ -43,6 +45,8 @@ type ImportRequest struct {
 }
 
 func NewImportRequest(debrid string, downloadFolder string, magnet *utils.Magnet, arr *arr.Arr, action string, downloadUncached bool, callBackUrl string, importType ImportType) *ImportRequest {
+	cfg := config.Get()
+	callBackUrl = cmp.Or(callBackUrl, cfg.CallbackURL)
 	return &ImportRequest{
 		Id:               uuid.New().String(),
 		Status:           "started",
@@ -83,7 +87,7 @@ func (i *ImportRequest) sendCallback(torrent *Torrent, debridTorrent *debridType
 		Torrent:     torrent,
 		Debrid:      debridTorrent,
 	})
-	
+
 	if err != nil {
 		return
 	}

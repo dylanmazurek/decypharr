@@ -1,6 +1,7 @@
 package debrid
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -9,19 +10,22 @@ import (
 
 	"github.com/dylanmazurek/decypharr/internal/config"
 	"github.com/dylanmazurek/decypharr/internal/logger"
+	"github.com/dylanmazurek/decypharr/internal/request"
 	"github.com/dylanmazurek/decypharr/internal/utils"
 	"github.com/dylanmazurek/decypharr/pkg/arr"
+	"github.com/dylanmazurek/decypharr/pkg/debrid/common"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/providers/torbox"
 	debridStore "github.com/dylanmazurek/decypharr/pkg/debrid/store"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
+	"go.uber.org/ratelimit"
 )
 
 type Debrid struct {
 	cache  *debridStore.Cache // Could be nil if not using WebDAV
-	client types.Client       // HTTP client for making requests to the debrid service
+	client common.Client      // HTTP client for making requests to the debrid service
 }
 
-func (de *Debrid) Client() types.Client {
+func (de *Debrid) Client() common.Client {
 	return de.client
 }
 
@@ -92,12 +96,19 @@ func (d *Storage) StartWorker(ctx context.Context) error {
 		ctx = context.Background()
 	}
 
-	// Start all debrid syncAccounts
-	// Runs every 1m
-	if err := d.syncAccounts(); err != nil {
-		return err
-	}
+	// Start syncAccounts worker
+	go d.syncAccountsWorker(ctx)
 
+	// Start bandwidth reset worker
+	go d.checkBandwidthWorker(ctx)
+
+	return nil
+}
+
+func (d *Storage) checkBandwidthWorker(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	ticker := time.NewTicker(5 * time.Minute)
 	go func() {
 		for {
@@ -148,7 +159,7 @@ func (d *Storage) Debrids() map[string]*Debrid {
 	return debridsCopy
 }
 
-func (d *Storage) Client(name string) types.Client {
+func (d *Storage) Client(name string) common.Client {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -175,7 +186,7 @@ func (d *Storage) Reset() {
 	d.lastUsed = ""
 }
 
-func (d *Storage) Clients() map[string]types.Client {
+func (d *Storage) Clients() map[string]common.Client {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -203,7 +214,7 @@ func (d *Storage) Caches() map[string]*debridStore.Cache {
 	return cachesCopy
 }
 
-func (d *Storage) FilterClients(filter func(types.Client) bool) map[string]types.Client {
+func (d *Storage) FilterClients(filter func(common.Client) bool) map[string]common.Client {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -217,7 +228,17 @@ func (d *Storage) FilterClients(filter func(types.Client) bool) map[string]types
 	return filteredClients
 }
 
-func createDebridClient(dc config.Debrid) (types.Client, error) {
+func createDebridClient(dc config.Debrid) (common.Client, error) {
+	rateLimits := map[string]ratelimit.Limiter{}
+
+	mainRL := request.ParseRateLimit(dc.RateLimit)
+	repairRL := request.ParseRateLimit(cmp.Or(dc.RepairRateLimit, dc.RateLimit))
+	downloadRL := request.ParseRateLimit(cmp.Or(dc.DownloadRateLimit, dc.RateLimit))
+
+	rateLimits["main"] = mainRL
+	rateLimits["repair"] = repairRL
+	rateLimits["download"] = downloadRL
+
 	switch dc.Name {
 	case "torbox":
 		return torbox.New(dc)
@@ -236,7 +257,7 @@ func Process(ctx context.Context, store *Storage, selectedDebrid string, magnet 
 		Files:    make(map[string]types.File),
 	}
 
-	clients := store.FilterClients(func(c types.Client) bool {
+	clients := store.FilterClients(func(c common.Client) bool {
 		if selectedDebrid != "" && c.Name() != selectedDebrid {
 			return false
 		}

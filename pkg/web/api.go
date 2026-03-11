@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dylanmazurek/decypharr/pkg/store"
 	"golang.org/x/crypto/bcrypt"
 
 	"encoding/json"
@@ -16,11 +15,12 @@ import (
 	"github.com/dylanmazurek/decypharr/internal/utils"
 	"github.com/dylanmazurek/decypharr/pkg/arr"
 	"github.com/dylanmazurek/decypharr/pkg/version"
+	"github.com/dylanmazurek/decypharr/pkg/wire"
 	"github.com/go-chi/chi/v5"
 )
 
 func (wb *Web) handleGetArrs(w http.ResponseWriter, r *http.Request) {
-	_store := store.Get()
+	_store := wire.Get()
 	request.JSONResponse(w, _store.Arr().GetAll(), http.StatusOK)
 }
 
@@ -30,9 +30,9 @@ func (wb *Web) handleAddContent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	_store := store.Get()
+	_store := wire.Get()
 
-	results := make([]*store.ImportRequest, 0)
+	results := make([]*wire.ImportRequest, 0)
 	errs := make([]string, 0)
 
 	arrName := r.FormValue("arr")
@@ -68,7 +68,7 @@ func (wb *Web) handleAddContent(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			importReq := store.NewImportRequest(debridName, downloadFolder, magnet, _arr, action, downloadUncached, callbackUrl, store.ImportTypeAPI)
+			importReq := wire.NewImportRequest(debridName, downloadFolder, magnet, _arr, action, downloadUncached, callbackUrl, wire.ImportTypeAPI)
 			if err := _store.AddTorrent(ctx, importReq); err != nil {
 				wb.logger.Error().Err(err).Str("url", url).Msg("Failed to add torrent")
 				errs = append(errs, fmt.Sprintf("URL %s: %v", url, err))
@@ -93,7 +93,7 @@ func (wb *Web) handleAddContent(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			importReq := store.NewImportRequest(debridName, downloadFolder, magnet, _arr, action, downloadUncached, callbackUrl, store.ImportTypeAPI)
+			importReq := wire.NewImportRequest(debridName, downloadFolder, magnet, _arr, action, downloadUncached, callbackUrl, wire.ImportTypeAPI)
 			err = _store.AddTorrent(ctx, importReq)
 			if err != nil {
 				wb.logger.Error().Err(err).Str("file", fileHeader.Filename).Msg("Failed to add torrent")
@@ -105,8 +105,8 @@ func (wb *Web) handleAddContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	request.JSONResponse(w, struct {
-		Results []*store.ImportRequest `json:"results"`
-		Errors  []string               `json:"errors,omitempty"`
+		Results []*wire.ImportRequest `json:"results"`
+		Errors  []string              `json:"errors,omitempty"`
 	}{
 		Results: results,
 		Errors:  errs,
@@ -150,7 +150,7 @@ func (wb *Web) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	// Merge config arrs, with arr Storage
 	unique := map[string]config.Arr{}
 	cfg := config.Get()
-	arrStorage := store.Get().Arr()
+	arrStorage := wire.Get().Arr()
 
 	// Add existing Arrs from storage
 	for _, a := range arrStorage.GetAll() {
@@ -222,6 +222,7 @@ func (wb *Web) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	currentConfig.RemoveStalledAfter = updatedConfig.RemoveStalledAfter
 	currentConfig.AllowedExt = updatedConfig.AllowedExt
 	currentConfig.DiscordWebhook = updatedConfig.DiscordWebhook
+	currentConfig.CallbackURL = updatedConfig.CallbackURL
 
 	// Should this be added?
 	currentConfig.URLBase = updatedConfig.URLBase
@@ -238,7 +239,7 @@ func (wb *Web) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update Arrs through the service
-	storage := store.Get()
+	storage := wire.Get()
 	arrStorage := storage.Arr()
 
 	newConfigArrs := make([]config.Arr, 0)
@@ -284,7 +285,7 @@ func (wb *Web) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	if restartFunc != nil {
 		go func() {
 			// Small delay to ensure the response is sent
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 			restartFunc()
 		}()
 	}

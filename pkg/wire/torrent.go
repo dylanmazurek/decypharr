@@ -1,4 +1,4 @@
-package store
+package wire
 
 import (
 	"cmp"
@@ -239,6 +239,7 @@ func (s *Store) partialTorrentUpdate(t *Torrent, debridTorrent *types.Torrent) *
 	t.Files = files
 	t.Debrid = debridTorrent.Debrid
 	t.Size = totalSize
+	t.TotalSize = totalSize
 	t.Completed = sizeCompleted
 	t.NumSeeds = debridTorrent.Seeders
 	t.Downloaded = sizeCompleted
@@ -267,7 +268,7 @@ func (s *Store) updateTorrent(t *Torrent, debridTorrent *types.Torrent) *Torrent
 	}
 
 	t = s.partialTorrentUpdate(t, debridTorrent)
-	t.ContentPath = t.TorrentPath + string(os.PathSeparator)
+	t.ContentPath = t.TorrentPath
 
 	if t.IsReady() {
 		t.State = "pausedUP"
