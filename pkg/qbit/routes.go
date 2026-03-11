@@ -1,8 +1,9 @@
 package qbit
 
 import (
-	"github.com/go-chi/chi/v5"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func (q *QBit) Routes() http.Handler {

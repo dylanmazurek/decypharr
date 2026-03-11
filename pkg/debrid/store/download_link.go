@@ -1,34 +1,10 @@
 package store
 
 import (
-	"errors"
 	"fmt"
-	"github.com/dylanmazurek/decypharr/internal/utils"
+
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
 )
-
-type downloadLinkRequest struct {
-	result string
-	err    error
-	done   chan struct{}
-}
-
-func newDownloadLinkRequest() *downloadLinkRequest {
-	return &downloadLinkRequest{
-		done: make(chan struct{}),
-	}
-}
-
-func (r *downloadLinkRequest) Complete(result string, err error) {
-	r.result = result
-	r.err = err
-	close(r.done)
-}
-
-func (r *downloadLinkRequest) Wait() (string, error) {
-	<-r.done
-	return r.result, r.err
-}
 
 func (c *Cache) GetDownloadLink(torrentName, filename, fileLink string) (string, error) {
 	// Check link cache
@@ -36,31 +12,14 @@ func (c *Cache) GetDownloadLink(torrentName, filename, fileLink string) (string,
 		return dl, nil
 	}
 
-	if req, inFlight := c.downloadLinkRequests.Load(fileLink); inFlight {
-		// Wait for the other request to complete and use its result
-		result := req.(*downloadLinkRequest)
-		return result.Wait()
-	}
-
-	// Create a new request object
-	req := newDownloadLinkRequest()
-	c.downloadLinkRequests.Store(fileLink, req)
-
 	dl, err := c.fetchDownloadLink(torrentName, filename, fileLink)
 	if err != nil {
-		req.Complete("", err)
-		c.downloadLinkRequests.Delete(fileLink)
 		return "", err
 	}
 
 	if dl == nil || dl.DownloadLink == "" {
-		err = fmt.Errorf("download link is empty for %s in torrent %s", filename, torrentName)
-		req.Complete("", err)
-		c.downloadLinkRequests.Delete(fileLink)
-		return "", err
+		return "", fmt.Errorf("download link is empty for %s in torrent %s", filename, torrentName)
 	}
-	req.Complete(dl.DownloadLink, err)
-	c.downloadLinkRequests.Delete(fileLink)
 	return dl.DownloadLink, err
 }
 
@@ -89,51 +48,13 @@ func (c *Cache) fetchDownloadLink(torrentName, filename, fileLink string) (*type
 
 	// If file.Link is still empty, return
 	if file.Link == "" {
-		// Try to reinsert the torrent?
-		newCt, err := c.reInsertTorrent(ct)
-		if err != nil {
-			return nil, fmt.Errorf("failed to reinsert torrent. %w", err)
-		}
-		ct = newCt
-		file, ok = ct.GetFile(filename)
-		if !ok {
-			return nil, fmt.Errorf("file %s not found in reinserted torrent %s", filename, torrentName)
-		}
+		return nil, fmt.Errorf("file %s has no download link", filename)
 	}
 
 	c.logger.Trace().Msgf("Getting download link for %s(%s)", filename, file.Link)
 	downloadLink, err := c.client.GetDownloadLink(ct.Torrent, &file)
 	if err != nil {
-		if errors.Is(err, utils.HosterUnavailableError) {
-			c.logger.Trace().
-				Str("filename", filename).
-				Str("torrent_id", ct.Id).
-				Msg("Hoster unavailable, attempting to reinsert torrent")
-
-			newCt, err := c.reInsertTorrent(ct)
-			if err != nil {
-				return nil, fmt.Errorf("failed to reinsert torrent: %w", err)
-			}
-			ct = newCt
-			file, ok = ct.GetFile(filename)
-			if !ok {
-				return nil, fmt.Errorf("file %s not found in reinserted torrent %s", filename, torrentName)
-			}
-			// Retry getting the download link
-			downloadLink, err = c.client.GetDownloadLink(ct.Torrent, &file)
-			if err != nil {
-				return nil, fmt.Errorf("retry failed to get download link: %w", err)
-			}
-			if downloadLink == nil {
-				return nil, fmt.Errorf("download link is empty after retry")
-			}
-			return nil, nil
-		} else if errors.Is(err, utils.TrafficExceededError) {
-			// This is likely a fair usage limit error
-			return nil, err
-		} else {
-			return nil, fmt.Errorf("failed to get download link: %w", err)
-		}
+		return nil, fmt.Errorf("failed to get download link: %w", err)
 	}
 	if downloadLink == nil {
 		return nil, fmt.Errorf("download link is empty")

@@ -1,0 +1,18 @@
+name: decypharr
+
+services:
+  mock-torbox:
+    build:
+      context: .
+      dockerfile: cmd/mock-torbox/Dockerfile
+    ports:
+      - 8080:8080
+
+  decypharr:
+    build: .
+    ports:
+      - 8112:8112
+    volumes:
+      - ./docker-config.json:/data/config.json
+    depends_on:
+      - mock-torbox

@@ -9,25 +9,22 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/dylanmazurek/decypharr/pkg/rclone"
-
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
 
 	"encoding/json"
 	_ "time/tzdata"
 
-	"github.com/go-co-op/gocron/v2"
-	"github.com/rs/zerolog"
 	"github.com/dylanmazurek/decypharr/internal/config"
 	"github.com/dylanmazurek/decypharr/internal/logger"
 	"github.com/dylanmazurek/decypharr/internal/utils"
+	"github.com/go-co-op/gocron/v2"
+	"github.com/rs/zerolog"
 )
 
 type WebDavFolderNaming string
@@ -81,13 +78,6 @@ type Cache struct {
 	folderNaming         WebDavFolderNaming
 
 	listingDebouncer *utils.Debouncer[bool]
-	// monitors
-	repairRequest        sync.Map
-	failedToReinsert     sync.Map
-	downloadLinkRequests sync.Map
-
-	// repair
-	repairChan chan RepairRequest
 
 	// readiness
 	ready chan struct{}
@@ -108,10 +98,9 @@ type Cache struct {
 
 	config        config.Debrid
 	customFolders []string
-	mounter       *rclone.Mount
 }
 
-func NewDebridCache(dc config.Debrid, client types.Client, mounter *rclone.Mount) *Cache {
+func NewDebridCache(dc config.Debrid, client types.Client) *Cache {
 	cfg := config.Get()
 	cet, err := time.LoadLocation("CET")
 	if err != nil {
@@ -120,64 +109,45 @@ func NewDebridCache(dc config.Debrid, client types.Client, mounter *rclone.Mount
 			cet = time.FixedZone("CET", 1*60*60) // Fallback to a fixed CET zone
 		}
 	}
+
 	cetSc, err := gocron.NewScheduler(gocron.WithLocation(cet))
 	if err != nil {
 		// If we can't create a CET scheduler, fallback to local time
 		cetSc, _ = gocron.NewScheduler(gocron.WithLocation(time.Local), gocron.WithGlobalJobOptions(
 			gocron.WithTags("decypharr-"+dc.Name)))
 	}
+
 	scheduler, err := gocron.NewScheduler(
 		gocron.WithLocation(time.Local),
 		gocron.WithGlobalJobOptions(
-			gocron.WithTags("decypharr-"+dc.Name)))
+			gocron.WithTags("decypharr-"+dc.Name)),
+	)
+
 	if err != nil {
 		// If we can't create a local scheduler, fallback to CET
 		scheduler = cetSc
 	}
 
-	var customFolders []string
-	dirFilters := map[string][]directoryFilter{}
-	for name, value := range dc.Directories {
-		for filterType, v := range value.Filters {
-			df := directoryFilter{filterType: filterType, value: v}
-			switch filterType {
-			case filterByRegex, filterByNotRegex:
-				df.regex = regexp.MustCompile(v)
-			case filterBySizeGT, filterBySizeLT:
-				df.sizeThreshold, _ = config.ParseSize(v)
-			case filterBLastAdded:
-				df.ageThreshold, _ = time.ParseDuration(v)
-			}
-			dirFilters[name] = append(dirFilters[name], df)
-		}
-		customFolders = append(customFolders, name)
-
-	}
 	_log := logger.New(fmt.Sprintf("%s-webdav", client.Name()))
 	c := &Cache{
-		dir: filepath.Join(cfg.Path, "cache", dc.Name), // path to save cache files
+		dir: filepath.Join(cfg.Path, "cache", dc.Name),
 
-		torrents:                     newTorrentCache(dirFilters),
-		client:                       client,
-		logger:                       _log,
-		workers:                      dc.Workers,
-		torrentRefreshInterval:       dc.TorrentsRefreshInterval,
-		downloadLinksRefreshInterval: dc.DownloadLinksRefreshInterval,
-		folderNaming:                 WebDavFolderNaming(dc.FolderNaming),
-		saveSemaphore:                make(chan struct{}, 50),
-		cetScheduler:                 cetSc,
-		scheduler:                    scheduler,
+		torrents:      newTorrentCache(nil),
+		client:        client,
+		logger:        _log,
+		saveSemaphore: make(chan struct{}, 50),
+		cetScheduler:  cetSc,
+		scheduler:     scheduler,
 
-		config:        dc,
-		customFolders: customFolders,
-		mounter:       mounter,
+		config: dc,
 
 		ready: make(chan struct{}),
 	}
 
 	c.listingDebouncer = utils.NewDebouncer[bool](100*time.Millisecond, func(refreshRclone bool) {
-		c.RefreshListings(refreshRclone)
+		c.RefreshListings()
 	})
+
 	return c
 }
 
@@ -185,60 +155,38 @@ func (c *Cache) IsReady() chan struct{} {
 	return c.ready
 }
 
-func (c *Cache) StreamWithRclone() bool {
-	return c.config.ServeFromRclone
-}
-
 // Reset clears all internal state so the Cache can be reused without leaks.
 // Call this after stopping the old Cache (so no goroutines are holding references),
 // and before you discard the instance on a restart.
 func (c *Cache) Reset() {
-
-	// Unmount first
-	if c.mounter != nil && c.mounter.IsMounted() {
-		if err := c.mounter.Unmount(); err != nil {
-			c.logger.Error().Err(err).Msgf("Failed to unmount %s", c.config.Name)
-		} else {
-			c.logger.Info().Msgf("Unmounted %s", c.config.Name)
-		}
-	}
-
-	if err := c.scheduler.StopJobs(); err != nil {
+	err := c.scheduler.StopJobs()
+	if err != nil {
 		c.logger.Error().Err(err).Msg("Failed to stop scheduler jobs")
 	}
 
-	if err := c.scheduler.Shutdown(); err != nil {
+	err = c.scheduler.Shutdown()
+	if err != nil {
 		c.logger.Error().Err(err).Msg("Failed to stop scheduler")
 	}
 
 	// Stop the listing debouncer
 	c.listingDebouncer.Stop()
 
-	// Close the repair channel
-	if c.repairChan != nil {
-		close(c.repairChan)
-	}
-
 	// 1. Reset torrent storage
 	c.torrents.reset()
 
 	// 3. Clear any sync.Maps
 	c.invalidDownloadLinks = sync.Map{}
-	c.repairRequest = sync.Map{}
-	c.failedToReinsert = sync.Map{}
-	c.downloadLinkRequests = sync.Map{}
 
 	// 5. Rebuild the listing debouncer
 	c.listingDebouncer = utils.NewDebouncer[bool](
 		100*time.Millisecond,
 		func(refreshRclone bool) {
-			c.RefreshListings(refreshRclone)
+			c.RefreshListings()
 		},
 	)
 
 	// 6. Reset repair channel so the next Start() can spin it up
-	c.repairChan = make(chan RepairRequest, 100)
-
 	// Reset the ready channel
 	c.ready = make(chan struct{})
 }
@@ -250,30 +198,23 @@ func (c *Cache) Start(ctx context.Context) error {
 
 	c.logger.Info().Msgf("Started indexing...")
 
-	if err := c.Sync(ctx); err != nil {
+	err := c.Sync(ctx)
+	if err != nil {
 		return fmt.Errorf("failed to sync cache: %w", err)
 	}
+
 	// Fire the ready channel
 	close(c.ready)
 	c.logger.Info().Msgf("Indexing complete, %d torrents loaded", len(c.torrents.getAll()))
 
 	// initial download links
 	go c.refreshDownloadLinks(ctx)
-	c.repairChan = make(chan RepairRequest, 100) // Initialize the repair channel, max 100 requests buffered
-	go c.repairWorker(ctx)
 
 	cfg := config.Get()
 	name := c.client.Name()
 	addr := cfg.BindAddress + ":" + cfg.Port + cfg.URLBase + "webdav/" + name + "/"
 	c.logger.Info().Msgf("%s WebDav server running at %s", name, addr)
 
-	if c.mounter != nil {
-		if err := c.mounter.Mount(ctx); err != nil {
-			c.logger.Error().Err(err).Msgf("Failed to mount %s", c.config.Name)
-		}
-	} else {
-		c.logger.Warn().Msgf("Mounting is disabled for %s", c.config.Name)
-	}
 	return nil
 }
 
@@ -527,16 +468,15 @@ func (c *Cache) GetTorrentFolder(torrent *types.Torrent) string {
 func (c *Cache) setTorrent(t CachedTorrent, callback func(torrent CachedTorrent)) {
 	torrentName := c.GetTorrentFolder(t.Torrent)
 	updatedTorrent := t.copy()
-	if o, ok := c.torrents.getByName(torrentName); ok && o.Id != t.Id {
-		// If another torrent with the same name exists, merge the files, if the same file exists,
-		// keep the one with the most recent added date
-
-		// Save the most recent torrent
-		mergedFiles := mergeFiles(o, updatedTorrent) // Useful for merging files across multiple torrents, while keeping the most recent
+	o, ok := c.torrents.getByName(torrentName)
+	if ok && o.Id != t.Id {
+		mergedFiles := mergeFiles(o, updatedTorrent)
 		updatedTorrent.Files = mergedFiles
 	}
+
 	c.torrents.set(torrentName, t, updatedTorrent)
 	go c.SaveTorrent(t)
+
 	if callback != nil {
 		go callback(updatedTorrent)
 	}
@@ -546,13 +486,17 @@ func (c *Cache) setTorrents(torrents map[string]CachedTorrent, callback func()) 
 	for _, t := range torrents {
 		torrentName := c.GetTorrentFolder(t.Torrent)
 		updatedTorrent := t.copy()
-		if o, ok := c.torrents.getByName(torrentName); ok && o.Id != t.Id {
+
+		o, ok := c.torrents.getByName(torrentName)
+		if ok && o.Id != t.Id {
 			// Save the most recent torrent
 			mergedFiles := mergeFiles(o, updatedTorrent)
 			updatedTorrent.Files = mergedFiles
 		}
+
 		c.torrents.set(torrentName, t, updatedTorrent)
 	}
+
 	c.SaveTorrents()
 	if callback != nil {
 		callback()
@@ -586,9 +530,11 @@ func (c *Cache) TotalTorrents() int {
 }
 
 func (c *Cache) GetTorrentByName(name string) *CachedTorrent {
-	if torrent, ok := c.torrents.getByName(name); ok {
+	torrent, ok := c.torrents.getByName(name)
+	if ok {
 		return &torrent
 	}
+
 	return nil
 }
 
@@ -600,6 +546,7 @@ func (c *Cache) GetTorrent(torrentId string) *CachedTorrent {
 	if torrent, ok := c.torrents.getByID(torrentId); ok {
 		return &torrent
 	}
+
 	return nil
 }
 
@@ -639,7 +586,6 @@ func (c *Cache) SaveTorrent(ct CachedTorrent) {
 }
 
 func (c *Cache) saveTorrent(id string, data []byte) {
-
 	fileName := id + ".json"
 	filePath := filepath.Join(c.dir, fileName)
 
@@ -659,17 +605,20 @@ func (c *Cache) saveTorrent(id string, data []byte) {
 		if !fileClosed {
 			_ = f.Close()
 		}
+
 		// Clean up the temp file if it still exists and rename failed
 		_ = os.Remove(tmpFile)
 	}()
 
 	w := bufio.NewWriter(f)
-	if _, err := w.Write(data); err != nil {
+	_, err = w.Write(data)
+	if err != nil {
 		c.logger.Error().Err(err).Msgf("Failed to write data: %s", tmpFile)
 		return
 	}
 
-	if err := w.Flush(); err != nil {
+	err = w.Flush()
+	if err != nil {
 		c.logger.Error().Err(err).Msgf("Failed to flush data: %s", tmpFile)
 		return
 	}
@@ -678,7 +627,8 @@ func (c *Cache) saveTorrent(id string, data []byte) {
 	_ = f.Close()
 	fileClosed = true
 
-	if err := os.Rename(tmpFile, filePath); err != nil {
+	err = os.Rename(tmpFile, filePath)
+	if err != nil {
 		c.logger.Error().Err(err).Msgf("Failed to rename file: %s", tmpFile)
 		return
 	}
@@ -753,7 +703,7 @@ func (c *Cache) Add(t *types.Torrent) error {
 	}
 
 	c.setTorrent(ct, func(tor CachedTorrent) {
-		c.RefreshListings(true)
+		c.RefreshListings()
 	})
 
 	go c.GetFileDownloadLinks(ct)
@@ -770,7 +720,7 @@ func (c *Cache) DeleteTorrent(id string) error {
 	defer c.torrentsRefreshMu.Unlock()
 
 	if c.deleteTorrent(id, true) {
-		go c.RefreshListings(true)
+		go c.RefreshListings()
 		return nil
 	}
 

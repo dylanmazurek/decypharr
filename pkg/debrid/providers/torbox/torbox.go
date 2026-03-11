@@ -16,13 +16,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/dylanmazurek/decypharr/internal/config"
 	"github.com/dylanmazurek/decypharr/internal/logger"
 	"github.com/dylanmazurek/decypharr/internal/request"
 	"github.com/dylanmazurek/decypharr/internal/utils"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
 	"github.com/dylanmazurek/decypharr/pkg/version"
+	"github.com/rs/zerolog"
 )
 
 type Torbox struct {
@@ -35,7 +35,6 @@ type Torbox struct {
 	DownloadUncached bool
 	client           *request.Client
 
-	MountPath   string
 	logger      zerolog.Logger
 	checkCached bool
 	addSamples  bool
@@ -49,6 +48,7 @@ func New(dc config.Debrid) (*Torbox, error) {
 		"Authorization": fmt.Sprintf("Bearer %s", dc.APIKey),
 		"User-Agent":    fmt.Sprintf("Decypharr/%s (%s; %s)", version.GetInfo(), runtime.GOOS, runtime.GOARCH),
 	}
+
 	_log := logger.New(dc.Name)
 	client := request.New(
 		request.WithHeaders(headers),
@@ -57,20 +57,21 @@ func New(dc config.Debrid) (*Torbox, error) {
 		request.WithProxy(dc.Proxy),
 	)
 
-	autoExpiresLinksAfter, err := time.ParseDuration(dc.AutoExpireLinksAfter)
-	if autoExpiresLinksAfter == 0 || err != nil {
-		autoExpiresLinksAfter = 48 * time.Hour
+	autoExpiresLinksAfter := 48 * time.Hour
+
+	host := "https://api.torbox.app/v1"
+	if dc.HostURL != "" {
+		host = dc.HostURL
 	}
 
 	return &Torbox{
 		name:                  "torbox",
-		Host:                  "https://api.torbox.app/v1",
+		Host:                  host,
 		APIKey:                dc.APIKey,
 		accounts:              types.NewAccounts(dc),
 		DownloadUncached:      dc.DownloadUncached,
 		autoExpiresLinksAfter: autoExpiresLinksAfter,
 		client:                client,
-		MountPath:             dc.Folder,
 		logger:                _log,
 		checkCached:           dc.CheckCached,
 		addSamples:            dc.AddSamples,
@@ -164,7 +165,6 @@ func (tb *Torbox) SubmitMagnet(torrent *types.Torrent) (*types.Torrent, error) {
 	dt := *data.Data
 	torrentId := strconv.Itoa(dt.Id)
 	torrent.Id = torrentId
-	torrent.MountPath = tb.MountPath
 	torrent.Debrid = tb.name
 
 	return torrent, nil
@@ -229,7 +229,6 @@ func (tb *Torbox) GetTorrent(torrentId string) (*types.Torrent, error) {
 		Seeders:          data.Seeds,
 		Filename:         data.Name,
 		OriginalFilename: data.Name,
-		MountPath:        tb.MountPath,
 		Debrid:           tb.name,
 		Files:            make(map[string]types.File),
 		Added:            data.CreatedAt.Format(time.RFC3339),
@@ -329,7 +328,6 @@ func (tb *Torbox) UpdateTorrent(t *types.Torrent) error {
 	t.Seeders = data.Seeds
 	t.Filename = name
 	t.OriginalFilename = name
-	t.MountPath = tb.MountPath
 	t.Debrid = tb.name
 
 	t.Files = make(map[string]types.File)
@@ -420,7 +418,11 @@ func (tb *Torbox) DeleteTorrent(torrentId string) error {
 		return err
 	}
 
-	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
 	_, err = tb.client.MakeRequest(req)
 	if err != nil {
 		return err
@@ -582,7 +584,6 @@ func (tb *Torbox) GetTorrents() ([]*types.Torrent, error) {
 			Seeders:          data.Seeds,
 			Filename:         data.Name,
 			OriginalFilename: data.Name,
-			MountPath:        tb.MountPath,
 			Debrid:           tb.name,
 			Files:            make(map[string]types.File),
 			Added:            data.CreatedAt.Format(time.RFC3339),
@@ -646,10 +647,6 @@ func (tb *Torbox) GetDownloadLinks() (map[string]*types.DownloadLink, error) {
 
 func (tb *Torbox) CheckLink(link string) error {
 	return nil
-}
-
-func (tb *Torbox) GetMountPath() string {
-	return tb.MountPath
 }
 
 func (tb *Torbox) DeleteDownloadLink(linkId string) error {

@@ -3,23 +3,20 @@ package store
 import (
 	"cmp"
 	"context"
-	"github.com/go-co-op/gocron/v2"
-	"github.com/rs/zerolog"
+	"sync"
+	"time"
+
 	"github.com/dylanmazurek/decypharr/internal/config"
 	"github.com/dylanmazurek/decypharr/internal/logger"
 	"github.com/dylanmazurek/decypharr/pkg/arr"
 	"github.com/dylanmazurek/decypharr/pkg/debrid"
-	"github.com/dylanmazurek/decypharr/pkg/rclone"
-	"github.com/dylanmazurek/decypharr/pkg/repair"
-	"sync"
-	"time"
+	"github.com/go-co-op/gocron/v2"
+	"github.com/rs/zerolog"
 )
 
 type Store struct {
-	repair             *repair.Repair
 	arr                *arr.Storage
 	debrid             *debrid.Storage
-	rcloneManager      *rclone.Manager
 	importsQueue       *ImportQueue // Queued import requests(probably from too_many_active_downloads)
 	torrents           *TorrentStorage
 	logger             zerolog.Logger
@@ -41,15 +38,9 @@ func Get() *Store {
 		cfg := config.Get()
 		qbitCfg := cfg.QBitTorrent
 
-		// Create rclone manager if enabled
-		var rcManager *rclone.Manager
-		if cfg.Rclone.Enabled {
-			rcManager = rclone.NewManager()
-		}
-
 		// Create services with dependencies
 		arrs := arr.NewStorage()
-		deb := debrid.NewStorage(rcManager)
+		deb := debrid.NewStorage()
 
 		scheduler, err := gocron.NewScheduler(gocron.WithLocation(time.Local), gocron.WithGlobalJobOptions(gocron.WithTags("decypharr-store")))
 		if err != nil {
@@ -57,10 +48,8 @@ func Get() *Store {
 		}
 
 		instance = &Store{
-			repair:            repair.New(arrs, deb),
 			arr:               arrs,
 			debrid:            deb,
-			rcloneManager:     rcManager,
 			torrents:          newTorrentStorage(cfg.TorrentsFile()),
 			logger:            logger.Default(), // Use default logger [decypharr]
 			refreshInterval:   time.Duration(cmp.Or(qbitCfg.RefreshInterval, 30)) * time.Second,
@@ -85,15 +74,11 @@ func Reset() {
 			instance.debrid.Reset()
 		}
 
-		if instance.rcloneManager != nil {
-			instance.rcloneManager.Stop()
-		}
-
 		if instance.importsQueue != nil {
 			instance.importsQueue.Close()
 		}
+
 		if instance.downloadSemaphore != nil {
-			// Close the semaphore channel to
 			close(instance.downloadSemaphore)
 		}
 
@@ -109,17 +94,13 @@ func Reset() {
 func (s *Store) Arr() *arr.Storage {
 	return s.arr
 }
+
 func (s *Store) Debrid() *debrid.Storage {
 	return s.debrid
 }
-func (s *Store) Repair() *repair.Repair {
-	return s.repair
-}
+
 func (s *Store) Torrents() *TorrentStorage {
 	return s.torrents
-}
-func (s *Store) RcloneManager() *rclone.Manager {
-	return s.rcloneManager
 }
 
 func (s *Store) Scheduler() gocron.Scheduler {

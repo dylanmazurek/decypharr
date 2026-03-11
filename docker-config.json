@@ -1,0 +1,20 @@
+{
+  "port": "8112",
+  "bind_address": "0.0.0.0",
+  "log_level": "debug",
+  "debrids": [
+    {
+      "name": "torbox",
+      "api_key": "dummy_key",
+      "host_url": "http://mock-torbox:8080",
+      "check_cached": true,
+      "download_uncached": false
+    }
+  ],
+  "qbittorrent": {
+    "username": "admin",
+    "password": "password",
+    "download_folder": "/data/downloads",
+    "refresh_interval": 5
+  }
+}

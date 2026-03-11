@@ -20,7 +20,6 @@ type Client interface {
 	GetDownloadingStatus() []string
 	GetDownloadLinks() (map[string]*DownloadLink, error)
 	CheckLink(link string) error
-	GetMountPath() string
 	Accounts() *Accounts // Returns the active download account/token
 	DeleteDownloadLink(linkId string) error
 	GetProfile() (*Profile, error)

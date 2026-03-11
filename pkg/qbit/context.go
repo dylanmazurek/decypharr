@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/go-chi/chi/v5"
-	"github.com/dylanmazurek/decypharr/internal/config"
-	"github.com/dylanmazurek/decypharr/pkg/arr"
-	"github.com/dylanmazurek/decypharr/pkg/store"
-	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/dylanmazurek/decypharr/internal/config"
+	"github.com/dylanmazurek/decypharr/pkg/arr"
+	"github.com/dylanmazurek/decypharr/pkg/store"
+	"github.com/go-chi/chi/v5"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type contextKey string
@@ -65,6 +66,7 @@ func getCategory(ctx context.Context) string {
 	if category, ok := ctx.Value(categoryKey).(string); ok {
 		return category
 	}
+
 	return ""
 }
 
@@ -136,7 +138,7 @@ func (q *QBit) authContext(next http.Handler) http.Handler {
 		if a == nil {
 			// Arr is not configured, create a new one
 			downloadUncached := false
-			a = arr.New(category, "", "", false, false, &downloadUncached, "", "auto")
+			a = arr.New(category, "", "", false, &downloadUncached, "", "auto")
 		}
 		if err == nil {
 			host = strings.TrimSpace(host)

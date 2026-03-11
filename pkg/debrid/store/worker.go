@@ -2,8 +2,9 @@ package store
 
 import (
 	"context"
-	"github.com/go-co-op/gocron/v2"
+
 	"github.com/dylanmazurek/decypharr/internal/utils"
+	"github.com/go-co-op/gocron/v2"
 )
 
 func (c *Cache) StartWorker(ctx context.Context) error {
@@ -37,22 +38,6 @@ func (c *Cache) StartWorker(ctx context.Context) error {
 			c.logger.Error().Err(err).Msg("Failed to create torrent refresh job")
 		} else {
 			c.logger.Debug().Msgf("Torrent refresh job scheduled for every %s", c.torrentRefreshInterval)
-		}
-	}
-
-	// Schedule the reset invalid links job
-	// This job will run every at 00:00 CET
-	// and reset the invalid links in the cache
-	if jd, err := utils.ConvertToJobDef("00:00"); err != nil {
-		c.logger.Error().Err(err).Msg("Failed to convert link reset interval to job definition")
-	} else {
-		// Schedule the job
-		if _, err := c.cetScheduler.NewJob(jd, gocron.NewTask(func() {
-			c.resetInvalidLinks(ctx)
-		}), gocron.WithContext(ctx)); err != nil {
-			c.logger.Error().Err(err).Msg("Failed to create link reset job")
-		} else {
-			c.logger.Debug().Msgf("Link reset job scheduled for every midnight, CET")
 		}
 	}
 

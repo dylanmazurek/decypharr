@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"runtime"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/dylanmazurek/decypharr/internal/request"
 	debridTypes "github.com/dylanmazurek/decypharr/pkg/debrid/types"
 	"github.com/dylanmazurek/decypharr/pkg/store"
+	"github.com/go-chi/chi/v5"
 )
 
 func (s *Server) handleIngests(w http.ResponseWriter, r *http.Request) {
@@ -156,25 +156,6 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stats["debrids"] = debridStats
-
-	// Add rclone stats if available
-	if rcManager := store.Get().RcloneManager(); rcManager != nil && rcManager.IsReady() {
-		rcStats, err := rcManager.GetStats()
-		if err != nil {
-			s.logger.Error().Err(err).Msg("Failed to get rclone stats")
-			stats["rclone"] = map[string]interface{}{
-				"enabled":      true,
-				"server_ready": false,
-			}
-		} else {
-			stats["rclone"] = rcStats
-		}
-	} else {
-		stats["rclone"] = map[string]interface{}{
-			"enabled":      false,
-			"server_ready": false,
-		}
-	}
 
 	request.JSONResponse(w, stats, http.StatusOK)
 }

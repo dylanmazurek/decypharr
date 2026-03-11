@@ -82,12 +82,6 @@ class ConfigManager {
             config.arrs.forEach(arr => this.addArrConfig(arr));
         }
 
-        // Load repair config
-        this.populateRepairSettings(config.repair);
-
-        // Load rclone config
-        this.populateRcloneSettings(config.rclone);
-
         // Load API token info
         this.populateAPIToken(config);
     }
@@ -123,45 +117,6 @@ class ConfigManager {
                     element.checked = qbitConfig[field];
                 } else {
                     element.value = qbitConfig[field];
-                }
-            }
-        });
-    }
-
-    populateRepairSettings(repairConfig) {
-        if (!repairConfig) return;
-
-        const fields = ['enabled', 'interval', 'workers', 'zurg_url', 'strategy', 'use_webdav', 'auto_process'];
-
-        fields.forEach(field => {
-            const element = document.querySelector(`[name="repair.${field}"]`);
-            if (element && repairConfig[field] !== undefined) {
-                if (element.type === 'checkbox') {
-                    element.checked = repairConfig[field];
-                } else {
-                    element.value = repairConfig[field];
-                }
-            }
-        });
-    }
-
-    populateRcloneSettings(rcloneConfig) {
-        if (!rcloneConfig) return;
-
-        const fields = [
-            'enabled', 'mount_path', 'cache_dir', 'vfs_cache_mode', 'vfs_cache_max_size', 'vfs_cache_max_age',
-            'vfs_cache_poll_interval', 'vfs_read_chunk_size', 'vfs_read_chunk_size_limit', 'buffer_size',
-            'uid', 'gid', 'vfs_read_ahead', 'attr_timeout', 'dir_cache_time', 'poll_interval', 'umask',
-            'no_modtime', 'no_checksum', 'log_level'
-        ];
-
-        fields.forEach(field => {
-            const element = document.querySelector(`[name="rclone.${field}"]`);
-            if (element && rcloneConfig[field] !== undefined) {
-                if (element.type === 'checkbox') {
-                    element.checked = rcloneConfig[field];
-                } else {
-                    element.value = rcloneConfig[field];
                 }
             }
         });
@@ -1080,13 +1035,7 @@ class ConfigManager {
             qbittorrent: this.collectQBittorrentConfig(),
 
             // Arr configurations
-            arrs: this.collectArrConfigs(),
-
-            // Repair configuration
-            repair: this.collectRepairConfig(),
-
-            // Rclone configuration
-            rclone: this.collectRcloneConfig()
+            arrs: this.collectArrConfigs()
         };
     }
 
@@ -1188,7 +1137,6 @@ class ConfigManager {
                 host: document.querySelector(`[name="arr[${i}].host"]`).value,
                 token: document.querySelector(`[name="arr[${i}].token"]`).value,
                 cleanup: document.querySelector(`[name="arr[${i}].cleanup"]`).checked,
-                skip_repair: document.querySelector(`[name="arr[${i}].skip_repair"]`).checked,
                 download_uncached: document.querySelector(`[name="arr[${i}].download_uncached"]`).checked,
                 selected_debrid: document.querySelector(`[name="arr[${i}].selected_debrid"]`).value,
                 source: document.querySelector(`[name="arr[${i}].source"]`).value

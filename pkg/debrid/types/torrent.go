@@ -1,13 +1,11 @@
 package types
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/dylanmazurek/decypharr/internal/logger"
 	"github.com/dylanmazurek/decypharr/internal/utils"
 	"github.com/dylanmazurek/decypharr/pkg/arr"
 )
@@ -29,7 +27,6 @@ type Torrent struct {
 	Speed            int64           `json:"speed"`
 	Seeders          int             `json:"seeders"`
 	Links            []string        `json:"links"`
-	MountPath        string          `json:"mount_path"`
 	DeletedFiles     []string        `json:"deleted_files"`
 
 	Debrid string `json:"debrid"`
@@ -44,26 +41,6 @@ type Torrent struct {
 
 func (t *Torrent) GetSymlinkFolder(parent string) string {
 	return filepath.Join(parent, t.Arr.Name, t.Folder)
-}
-
-func (t *Torrent) GetMountFolder(rClonePath string) (string, error) {
-	_log := logger.Default()
-	possiblePaths := []string{
-		t.OriginalFilename,
-		t.Filename,
-		utils.RemoveExtension(t.OriginalFilename),
-	}
-
-	for _, path := range possiblePaths {
-		_p := filepath.Join(rClonePath, path)
-		_log.Trace().Msgf("Checking path: %s", _p)
-		_, err := os.Stat(_p)
-		if !os.IsNotExist(err) {
-			return path, nil
-		}
-	}
-
-	return "", fmt.Errorf("no path found")
 }
 
 func (t *Torrent) GetFile(filename string) (File, bool) {

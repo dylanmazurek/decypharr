@@ -1,27 +1,36 @@
 # Decypharr AI Coding Agent Instructions
 
 ## Project Overview
-Decypharr is a Go-based QBittorrent API mock that integrates multiple Debrid services (Real-Debrid, Torbox, Debrid-Link, AllDebrid) with Sonarr/Radarr/Lidarr. It provides WebDAV access to debrid content, optional rclone mounting, and automated repair workflows for missing media files.
+Decypharr is a Go-based QBittorrent API mock that integrates Debrid services currently Torbox with Sonarr/Radarr.
+
+The main feature of this branch of Decypharr is to:
+- Emulate QBittorrent API for *Arr apps to submit torrents
+- Expose torrent services to Sonarr and Radarr, including:
+  - Adding torrents via magnet links
+  - Tracking download progress and status
+  - Removing torrents on completion
+
+## Branch Changes
+
+This branch removes support for multiple debrid providers and focuses solely on Torbox integration. Key changes include:
+- Removal of all debrid providers except Torbox
+- Remove WebDAV support; files are accessed via download links provided by Torbox
+- Remove rclone integration
+- Remoce repair worker functionality
 
 ## Architecture
 
 ### Core Components
 - **`pkg/qbit/`** - QBittorrent API emulation layer that the *Arr apps communicate with
 - **`pkg/debrid/`** - Debrid provider abstraction with provider-specific implementations in `providers/`
-- **`pkg/store/`** - Central state management singleton that orchestrates debrid, arr, repair, and rclone services
-- **`pkg/webdav/`** - WebDAV server providing filesystem access to debrid content
-- **`pkg/rclone/`** - Rclone mount manager for local filesystem integration
+- **`pkg/store/`** - Central state management singleton that orchestrates debrid, arr services
 - **`pkg/arr/`** - *Arr application integration (Sonarr/Radarr/Lidarr) for imports and cleanup
-- **`pkg/repair/`** - Automated repair worker that detects and resubmits missing files
 
 ### Data Flow
 1. *Arr app sends torrent to QBittorrent API (`pkg/qbit/routes.go`)
 2. Store (`pkg/store/store.go`) assigns torrent to a debrid provider based on availability/slots
 3. Debrid client (`pkg/debrid/types/client.go` interface) submits magnet to provider
-4. Cache (`pkg/debrid/store/cache.go`) syncs torrent state and generates WebDAV XML
-5. Rclone mounts WebDAV to local filesystem if enabled
-6. *Arr imports completed files from mount/WebDAV
-7. Repair worker periodically scans for missing files and resubmits
+4. Cache (`pkg/debrid/store/cache.go`) syncs torrent state
 
 ### Configuration System
 - Singleton pattern via `config.Get()` in `internal/config/config.go`
@@ -54,17 +63,32 @@ Implement `types.Client` interface in `pkg/debrid/types/client.go`. Each provide
 - Account rotation via `types.Accounts` - rotates through `DownloadAPIKeys` for download operations
 - Return `types.Torrent` with standardized fields across providers
 
-### WebDAV Cache System
-- `pkg/debrid/store/cache.go` maintains XML representations of debrid torrents
-- Sync worker refreshes every 30s via `cache.Sync()`
-- Download links cached with expiry checking in `download_link.go`
-- Rclone integration via `cache.refreshRclone()` to update mounts
-
 ### Error Handling
 - Use `types.Error` for debrid-specific errors with `Code` field
 - Check error codes: `TooManyActiveDownloadsError`, `TorrentExpiredError`, etc.
 - Retry logic in `internal/request.Client` handles 429/502 status codes
 - Repair worker catches missing file errors and queues resubmission
+
+### Go Code Style
+- Follow standard Go conventions (gofmt, godoc)
+- Use `zerolog` for structured logging
+- Context propagation with `context.Context` for cancellations and timeouts
+- Prefered conventions:
+  - Leave a space after if, for, switch statements
+  - Add space before return statements
+- Patterns:
+```go
+// Don't use this pattern
+	if a, ok := x; ok {
+		return a
+	}
+
+// Use this pattern
+  a, ok := x
+  if ok {
+    return a
+  }
+```
 
 ## Development Workflow
 
@@ -94,25 +118,7 @@ Multi-stage build with Go 1.24+ alpine base. Includes rclone installation in fin
 - Persistence to `torrents.json` is automatic on changes
 - Thread-safe with internal `sync.RWMutex`
 
-### WebDAV Enhancements
-- HTTP handlers in `pkg/webdav/handler.go`
-- Directory listings use `templates/directory.html` with `funcMap` helpers
-- PROPFIND XML generation in `propfind.go`
-- File streaming via `pkg/debrid/store/download_link.go` with byte-range support
-
-### Repair Logic Customization
-- Job tracking in `pkg/repair/repair.go` - each job has UUID, status, logs
-- Strategies: `RepairStrategyPerFile` or `RepairStrategyPerTorrent` (config: `repair.strategy`)
-- Worker pool size: `config.Repair.Workers` (default 5)
-- Re-insert vs new submission: controlled by `repair.reinsert` flag
-
 ## Important Conventions
 - **Logging**: Use `logger.New(component)` for component-specific loggers; structured logging with `zerolog`
-- **File Paths**: Cross-platform via `filepath.Join()`; mount paths configurable per debrid/global rclone
 - **Concurrency**: Use `errgroup` for parallel operations; semaphores for download limiting (`store.downloadSemaphore`)
 - **Context**: Always pass `context.Context` to long-running operations; main loop uses signal-based cancellation
-
-## Cross-Platform Considerations
-- Umask handling: `cmd/decypharr/umask_unix.go` vs `umask_win.go`
-- Rclone process management: `pkg/rclone/killed_unix.go` vs `killed_windows.go`
-- Mount requirements: `/dev/fuse` on Linux, WebDAV-only on Windows

@@ -91,17 +91,14 @@ func (q *QBit) handleTorrentsAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	action := "symlink"
-	if strings.ToLower(r.FormValue("sequentialDownload")) == "true" {
-		action = "download"
-	}
+	action := "download"
 
 	debridName := r.FormValue("debrid")
 	category := r.FormValue("category")
 	_arr := getArrFromContext(ctx)
 	if _arr == nil {
 		// Arr is not in context
-		_arr = arr.New(category, "", "", false, false, nil, "", "")
+		_arr = arr.New(category, "", "", false, nil, "", "")
 	}
 
 	atleastOne := false

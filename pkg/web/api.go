@@ -2,19 +2,21 @@ package web
 
 import (
 	"fmt"
-	"github.com/dylanmazurek/decypharr/pkg/store"
-	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/dylanmazurek/decypharr/pkg/store"
+	"golang.org/x/crypto/bcrypt"
+
 	"encoding/json"
-	"github.com/go-chi/chi/v5"
+
 	"github.com/dylanmazurek/decypharr/internal/config"
 	"github.com/dylanmazurek/decypharr/internal/request"
 	"github.com/dylanmazurek/decypharr/internal/utils"
 	"github.com/dylanmazurek/decypharr/pkg/arr"
 	"github.com/dylanmazurek/decypharr/pkg/version"
+	"github.com/go-chi/chi/v5"
 )
 
 func (wb *Web) handleGetArrs(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +49,7 @@ func (wb *Web) handleAddContent(w http.ResponseWriter, r *http.Request) {
 	_arr := _store.Arr().Get(arrName)
 	if _arr == nil {
 		// These are not found in the config. They are throwaway arrs.
-		_arr = arr.New(arrName, "", "", false, false, &downloadUncached, "", "")
+		_arr = arr.New(arrName, "", "", false, &downloadUncached, "", "")
 	}
 
 	// Handle URLs
@@ -111,44 +113,6 @@ func (wb *Web) handleAddContent(w http.ResponseWriter, r *http.Request) {
 	}, http.StatusOK)
 }
 
-func (wb *Web) handleRepairMedia(w http.ResponseWriter, r *http.Request) {
-	var req RepairRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	_store := store.Get()
-
-	var arrs []string
-
-	if req.ArrName != "" {
-		_arr := _store.Arr().Get(req.ArrName)
-		if _arr == nil {
-			http.Error(w, "No Arrs found to repair", http.StatusNotFound)
-			return
-		}
-		arrs = append(arrs, req.ArrName)
-	}
-
-	if req.Async {
-		go func() {
-			if err := _store.Repair().AddJob(arrs, req.MediaIds, req.AutoProcess, false); err != nil {
-				wb.logger.Error().Err(err).Msg("Failed to repair media")
-			}
-		}()
-		request.JSONResponse(w, "Repair process started", http.StatusOK)
-		return
-	}
-
-	if err := _store.Repair().AddJob([]string{req.ArrName}, req.MediaIds, req.AutoProcess, false); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to repair: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	request.JSONResponse(w, "Repair completed", http.StatusOK)
-}
-
 func (wb *Web) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	v := version.GetInfo()
 	request.JSONResponse(w, v, http.StatusOK)
@@ -197,7 +161,6 @@ func (wb *Web) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 				Host:             a.Host,
 				Token:            a.Token,
 				Cleanup:          a.Cleanup,
-				SkipRepair:       a.SkipRepair,
 				DownloadUncached: a.DownloadUncached,
 				SelectedDebrid:   a.SelectedDebrid,
 				Source:           a.Source,
@@ -211,6 +174,7 @@ func (wb *Web) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		unique[a.Name] = a
 	}
+
 	cfg.Arrs = make([]config.Arr, 0, len(unique))
 	for _, a := range unique {
 		cfg.Arrs = append(cfg.Arrs, a)
@@ -231,6 +195,7 @@ func (wb *Web) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		if auth.APIToken != "" {
 			response.APIToken = auth.APIToken
 		}
+
 		response.AuthUsername = auth.Username
 	}
 
@@ -240,7 +205,8 @@ func (wb *Web) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 func (wb *Web) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	// Decode the JSON body
 	var updatedConfig config.Config
-	if err := json.NewDecoder(r.Body).Decode(&updatedConfig); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&updatedConfig)
+	if err != nil {
 		wb.logger.Error().Err(err).Msg("Failed to decode config update request")
 		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
@@ -265,10 +231,6 @@ func (wb *Web) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	// Update QBitTorrent config
 	currentConfig.QBitTorrent = updatedConfig.QBitTorrent
 
-	// Update Repair config
-	currentConfig.Repair = updatedConfig.Repair
-	currentConfig.Rclone = updatedConfig.Rclone
-
 	// Update Debrids
 	if len(updatedConfig.Debrids) > 0 {
 		currentConfig.Debrids = updatedConfig.Debrids
@@ -287,6 +249,7 @@ func (wb *Web) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		newConfigArrs = append(newConfigArrs, a)
 	}
+
 	currentConfig.Arrs = newConfigArrs
 
 	// Add config arr into the config
@@ -294,25 +257,26 @@ func (wb *Web) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		if a.Host == "" || a.Token == "" {
 			continue // Skip empty arrs
 		}
+
 		existingArr := arrStorage.Get(a.Name)
 		if existingArr != nil {
 			// Update existing Arr
 			existingArr.Host = a.Host
 			existingArr.Token = a.Token
 			existingArr.Cleanup = a.Cleanup
-			existingArr.SkipRepair = a.SkipRepair
 			existingArr.DownloadUncached = a.DownloadUncached
 			existingArr.SelectedDebrid = a.SelectedDebrid
 			existingArr.Source = a.Source
 			arrStorage.AddOrUpdate(existingArr)
 		} else {
 			// Create new Arr if it doesn't exist
-			newArr := arr.New(a.Name, a.Host, a.Token, a.Cleanup, a.SkipRepair, a.DownloadUncached, a.SelectedDebrid, a.Source)
+			newArr := arr.New(a.Name, a.Host, a.Token, a.Cleanup, a.DownloadUncached, a.SelectedDebrid, a.Source)
 			arrStorage.AddOrUpdate(newArr)
 		}
 	}
 
-	if err := currentConfig.Save(); err != nil {
+	err = currentConfig.Save()
+	if err != nil {
 		http.Error(w, "Error saving config: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -327,58 +291,6 @@ func (wb *Web) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Return success
 	request.JSONResponse(w, map[string]string{"status": "success"}, http.StatusOK)
-}
-
-func (wb *Web) handleGetRepairJobs(w http.ResponseWriter, r *http.Request) {
-	_store := store.Get()
-	request.JSONResponse(w, _store.Repair().GetJobs(), http.StatusOK)
-}
-
-func (wb *Web) handleProcessRepairJob(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		http.Error(w, "No job ID provided", http.StatusBadRequest)
-		return
-	}
-	_store := store.Get()
-	if err := _store.Repair().ProcessJob(id); err != nil {
-		wb.logger.Error().Err(err).Msg("Failed to process repair job")
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (wb *Web) handleDeleteRepairJob(w http.ResponseWriter, r *http.Request) {
-	// Read ids from body
-	var req struct {
-		IDs []string `json:"ids"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if len(req.IDs) == 0 {
-		http.Error(w, "No job IDs provided", http.StatusBadRequest)
-		return
-	}
-
-	_store := store.Get()
-	_store.Repair().DeleteJobs(req.IDs)
-	w.WriteHeader(http.StatusOK)
-}
-
-func (wb *Web) handleStopRepairJob(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		http.Error(w, "No job ID provided", http.StatusBadRequest)
-		return
-	}
-	_store := store.Get()
-	if err := _store.Repair().StopJob(id); err != nil {
-		wb.logger.Error().Err(err).Msg("Failed to stop repair job")
-		http.Error(w, "Failed to stop job: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
 }
 
 func (wb *Web) handleRefreshAPIToken(w http.ResponseWriter, _ *http.Request) {
@@ -423,7 +335,9 @@ func (wb *Web) handleUpdateAuth(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to save authentication settings", http.StatusInternalServerError)
 			return
 		}
-		if err := cfg.Save(); err != nil {
+
+		err := cfg.Save()
+		if err != nil {
 			wb.logger.Error().Err(err).Msg("Failed to save config")
 			http.Error(w, "Failed to save configuration", http.StatusInternalServerError)
 			return
@@ -440,10 +354,12 @@ func (wb *Web) handleUpdateAuth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Username is required", http.StatusBadRequest)
 		return
 	}
+
 	if req.Password == "" {
 		http.Error(w, "Password is required", http.StatusBadRequest)
 		return
 	}
+
 	if req.Password != req.ConfirmPassword {
 		http.Error(w, "Passwords do not match", http.StatusBadRequest)
 		return
@@ -463,14 +379,16 @@ func (wb *Web) handleUpdateAuth(w http.ResponseWriter, r *http.Request) {
 	cfg.UseAuth = true
 
 	// Save auth config
-	if err := cfg.SaveAuth(auth); err != nil {
+	err = cfg.SaveAuth(auth)
+	if err != nil {
 		wb.logger.Error().Err(err).Msg("Failed to save auth config")
 		http.Error(w, "Failed to save authentication settings", http.StatusInternalServerError)
 		return
 	}
 
 	// Save main config
-	if err := cfg.Save(); err != nil {
+	err = cfg.Save()
+	if err != nil {
 		wb.logger.Error().Err(err).Msg("Failed to save config")
 		http.Error(w, "Failed to save configuration", http.StatusInternalServerError)
 		return

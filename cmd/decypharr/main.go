@@ -15,19 +15,9 @@ import (
 	"github.com/dylanmazurek/decypharr/pkg/store"
 	"github.com/dylanmazurek/decypharr/pkg/version"
 	"github.com/dylanmazurek/decypharr/pkg/web"
-	"github.com/dylanmazurek/decypharr/pkg/webdav"
 )
 
 func Start(ctx context.Context) error {
-
-	// if umaskStr := os.Getenv("UMASK"); umaskStr != "" {
-	// 	umask, err := strconv.ParseInt(umaskStr, 8, 32)
-	// 	if err != nil {
-	// 		return fmt.Errorf("invalid UMASK value: %s", umaskStr)
-	// 	}
-	// 	SetUmask(int(umask))
-	// }
-
 	restartCh := make(chan struct{}, 1)
 	web.SetRestartFunc(func() {
 		select {
@@ -59,18 +49,16 @@ func Start(ctx context.Context) error {
 
 		// Initialize services
 		qb := qbit.New()
-		wd := webdav.New()
 
 		ui := web.New().Routes()
-		webdavRoutes := wd.Routes()
 		qbitRoutes := qb.Routes()
 
 		// Register routes
 		handlers := map[string]http.Handler{
 			"/":       ui,
 			"/api/v2": qbitRoutes,
-			"/webdav": webdavRoutes,
 		}
+
 		srv := server.New(handlers)
 
 		reset := func() {
@@ -83,7 +71,7 @@ func Start(ctx context.Context) error {
 
 		done := make(chan struct{})
 		go func(ctx context.Context) {
-			if err := startServices(ctx, cancelSvc, wd, srv); err != nil {
+			if err := startServices(ctx, cancelSvc, srv); err != nil {
 				_log.Error().Err(err).Msg("Error starting services")
 				cancelSvc()
 			}
@@ -111,7 +99,7 @@ func Start(ctx context.Context) error {
 	}
 }
 
-func startServices(ctx context.Context, cancelSvc context.CancelFunc, wd *webdav.WebDav, srv *server.Server) error {
+func startServices(ctx context.Context, cancelSvc context.CancelFunc, srv *server.Server) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error)
 
@@ -141,33 +129,8 @@ func startServices(ctx context.Context, cancelSvc context.CancelFunc, wd *webdav
 	}
 
 	safeGo(func() error {
-		return wd.Start(ctx)
-	})
-
-	safeGo(func() error {
 		return srv.Start(ctx)
 	})
-
-	// Start rclone RC server if enabled
-	safeGo(func() error {
-		rcManager := store.Get().RcloneManager()
-		if rcManager == nil {
-			return nil
-		}
-		return rcManager.Start(ctx)
-	})
-
-	if cfg := config.Get(); cfg.Repair.Enabled {
-		safeGo(func() error {
-			repair := store.Get().Repair()
-			if repair != nil {
-				if err := repair.Start(ctx); err != nil {
-					_log.Error().Err(err).Msg("repair failed")
-				}
-			}
-			return nil
-		})
-	}
 
 	safeGo(func() error {
 		store.Get().StartWorkers(ctx)

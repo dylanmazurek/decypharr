@@ -102,48 +102,11 @@ func (s *Store) processFiles(torrent *Torrent, debridTorrent *types.Torrent, imp
 	}
 
 	var torrentPath string
-	var err error
 	debridTorrent.Arr = _arr
 
 	timer := time.Now()
 
 	switch importReq.Action {
-	case "symlink":
-		s.logger.Debug().Msgf("Post-Download Action: Symlink")
-		cache := deb.Cache()
-		if cache != nil {
-			s.logger.Info().Msgf("Using internal webdav for %s", debridTorrent.Debrid)
-			err := cache.Add(debridTorrent)
-			if err != nil {
-				s.onFailed(err, torrent, debridTorrent, importReq)
-				return
-			}
-
-			rclonePath := filepath.Join(debridTorrent.MountPath, cache.GetTorrentFolder(debridTorrent))
-			torrentFolderNoExt := utils.RemoveExtension(debridTorrent.Name)
-			torrentPath, err = s.createSymlinksWebdav(torrent, debridTorrent, rclonePath, torrentFolderNoExt)
-			if err != nil {
-				s.onFailed(err, torrent, debridTorrent, importReq)
-				return
-			}
-		} else {
-			torrentPath, err = s.processSymlink(torrent, debridTorrent)
-		}
-
-		if err != nil {
-			s.onFailed(err, torrent, debridTorrent, importReq)
-			return
-		}
-
-		if torrentPath == "" {
-			err = fmt.Errorf("symlink path is empty for %s", debridTorrent.Name)
-			s.onFailed(err, torrent, debridTorrent, importReq)
-		}
-
-		torrent.TorrentPath = torrentPath
-
-		s.onSuccess(torrent, debridTorrent, importReq, timer)
-		return
 	case "download":
 		s.logger.Debug().Msgf("Post-Download Action: Download")
 		err := client.GetFileDownloadLinks(debridTorrent)
@@ -176,6 +139,9 @@ func (s *Store) processFiles(torrent *Torrent, debridTorrent *types.Torrent, imp
 		s.onSuccess(torrent, debridTorrent, importReq, timer)
 	default:
 		// Action is none, do nothing, fallthrough
+		if importReq.Action == "symlink" {
+			s.logger.Warn().Msg("Symlink action requested but not supported. Ignoring.")
+		}
 	}
 }
 

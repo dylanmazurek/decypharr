@@ -6,15 +6,16 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/rs/zerolog"
-	"github.com/dylanmazurek/decypharr/internal/config"
-	"github.com/dylanmazurek/decypharr/internal/logger"
-	"github.com/dylanmazurek/decypharr/internal/request"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dylanmazurek/decypharr/internal/config"
+	"github.com/dylanmazurek/decypharr/internal/logger"
+	"github.com/dylanmazurek/decypharr/internal/request"
+	"github.com/rs/zerolog"
 )
 
 // Type is a type of arr
@@ -40,20 +41,18 @@ type Arr struct {
 	Token            string `json:"token"`
 	Type             Type   `json:"type"`
 	Cleanup          bool   `json:"cleanup"`
-	SkipRepair       bool   `json:"skip_repair"`
 	DownloadUncached *bool  `json:"download_uncached"`
 	SelectedDebrid   string `json:"selected_debrid,omitempty"` // The debrid service selected for this arr
 	Source           string `json:"source,omitempty"`          // The source of the arr, e.g. "auto", "manual". Auto means it was automatically detected from the arr
 }
 
-func New(name, host, token string, cleanup, skipRepair bool, downloadUncached *bool, selectedDebrid, source string) *Arr {
+func New(name, host, token string, cleanup bool, downloadUncached *bool, selectedDebrid, source string) *Arr {
 	return &Arr{
 		Name:             name,
 		Host:             host,
 		Token:            strings.TrimSpace(token),
 		Type:             InferType(host, name),
 		Cleanup:          cleanup,
-		SkipRepair:       skipRepair,
 		DownloadUncached: downloadUncached,
 		SelectedDebrid:   selectedDebrid,
 		Source:           source,
@@ -157,7 +156,7 @@ func NewStorage() *Storage {
 			continue // Skip if host or token is not set
 		}
 		name := a.Name
-		arrs[name] = New(name, a.Host, a.Token, a.Cleanup, a.SkipRepair, a.DownloadUncached, a.SelectedDebrid, a.Source)
+		arrs[name] = New(name, a.Host, a.Token, a.Cleanup, a.DownloadUncached, a.SelectedDebrid, a.Source)
 	}
 	return &Storage{
 		Arrs:   arrs,

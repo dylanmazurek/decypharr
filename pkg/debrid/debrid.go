@@ -11,12 +11,9 @@ import (
 	"github.com/dylanmazurek/decypharr/internal/logger"
 	"github.com/dylanmazurek/decypharr/internal/utils"
 	"github.com/dylanmazurek/decypharr/pkg/arr"
-	"github.com/dylanmazurek/decypharr/pkg/debrid/providers/alldebrid"
-	"github.com/dylanmazurek/decypharr/pkg/debrid/providers/debridlink"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/providers/torbox"
 	debridStore "github.com/dylanmazurek/decypharr/pkg/debrid/store"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
-	"github.com/dylanmazurek/decypharr/pkg/rclone"
 )
 
 type Debrid struct {
@@ -44,18 +41,12 @@ type Storage struct {
 	lastUsed string
 }
 
-func NewStorage(rcManager *rclone.Manager) *Storage {
+func NewStorage() *Storage {
 	cfg := config.Get()
 
 	_logger := logger.Default()
 
 	debrids := make(map[string]*Debrid)
-
-	bindAddress := cfg.BindAddress
-	if bindAddress == "" {
-		bindAddress = "localhost"
-	}
-	webdavUrl := fmt.Sprintf("http://%s:%s%s/webdav", bindAddress, cfg.Port, cfg.URLBase)
 
 	for _, dc := range cfg.Debrids {
 		client, err := createDebridClient(dc)
@@ -63,20 +54,14 @@ func NewStorage(rcManager *rclone.Manager) *Storage {
 			_logger.Error().Err(err).Str("Debrid", dc.Name).Msg("failed to connect to debrid client")
 			continue
 		}
+
 		var (
-			cache   *debridStore.Cache
-			mounter *rclone.Mount
+			cache *debridStore.Cache
 		)
+
 		_log := client.Logger()
-		if dc.UseWebDav {
-			if cfg.Rclone.Enabled && rcManager != nil {
-				mounter = rclone.NewMount(dc.Name, dc.RcloneMountPath, webdavUrl, rcManager)
-			}
-			cache = debridStore.NewDebridCache(dc, client, mounter)
-			_log.Info().Msg("Debrid Service started with WebDAV")
-		} else {
-			_log.Info().Msg("Debrid Service started")
-		}
+		_log.Info().Msg("Debrid Service started")
+
 		debrids[dc.Name] = &Debrid{
 			cache:  cache,
 			client: client,
@@ -92,10 +77,13 @@ func NewStorage(rcManager *rclone.Manager) *Storage {
 
 func (d *Storage) Debrid(name string) *Debrid {
 	d.mu.RLock()
+
 	defer d.mu.RUnlock()
-	if debrid, exists := d.debrids[name]; exists {
+	debrid, exists := d.debrids[name]
+	if exists {
 		return debrid
 	}
+
 	return nil
 }
 
@@ -136,7 +124,8 @@ func (d *Storage) syncAccounts() error {
 
 		_log := debrid.client.Logger()
 
-		if err := debrid.client.SyncAccounts(); err != nil {
+		err := debrid.client.SyncAccounts()
+		if err != nil {
 			_log.Error().Err(err).Msgf("Failed to sync account for %s", name)
 			continue
 		}
@@ -232,10 +221,6 @@ func createDebridClient(dc config.Debrid) (types.Client, error) {
 	switch dc.Name {
 	case "torbox":
 		return torbox.New(dc)
-	case "debridlink":
-		return debridlink.New(dc)
-	case "alldebrid":
-		return alldebrid.New(dc)
 	default:
 		return nil, fmt.Errorf("unknown debrid client: %s", dc.Name)
 	}

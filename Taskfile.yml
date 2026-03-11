@@ -15,3 +15,19 @@ tasks:
     desc: Run the decypharr application
     cmds:
       - go run main.go
+
+  test:all:
+    desc: Run all tests
+    cmds:
+      - task: test:qbit
+      - task: test:torbox
+
+  test:qbit:
+    desc: Run QBit API emulation tests
+    cmds:
+      - go test ./pkg/qbit/ -v -count=1
+
+  test:torbox:
+    desc: Run TorBox provider tests
+    cmds:
+      - go test ./pkg/debrid/providers/torbox/ -v -count=1

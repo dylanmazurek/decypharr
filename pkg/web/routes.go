@@ -1,9 +1,10 @@
 package web
 
 import (
-	"github.com/go-chi/chi/v5"
 	"io/fs"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func (wb *Web) Routes() http.Handler {
@@ -34,17 +35,11 @@ func (wb *Web) Routes() http.Handler {
 		r.Use(wb.setupMiddleware)
 		r.Get("/", wb.IndexHandler)
 		r.Get("/download", wb.DownloadHandler)
-		r.Get("/repair", wb.RepairHandler)
 		r.Get("/stats", wb.StatsHandler)
 		r.Get("/config", wb.ConfigHandler)
 		r.Route("/api", func(r chi.Router) {
 			r.Get("/arrs", wb.handleGetArrs)
 			r.Post("/add", wb.handleAddContent)
-			r.Post("/repair", wb.handleRepairMedia)
-			r.Get("/repair/jobs", wb.handleGetRepairJobs)
-			r.Post("/repair/jobs/{id}/process", wb.handleProcessRepairJob)
-			r.Post("/repair/jobs/{id}/stop", wb.handleStopRepairJob)
-			r.Delete("/repair/jobs", wb.handleDeleteRepairJob)
 			r.Get("/torrents", wb.handleGetTorrents)
 			r.Delete("/torrents/{category}/{hash}", wb.handleDeleteTorrent)
 			r.Delete("/torrents/", wb.handleDeleteTorrents)

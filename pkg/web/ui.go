@@ -2,9 +2,10 @@ package web
 
 import (
 	"encoding/json"
+	"net/http"
+
 	"github.com/dylanmazurek/decypharr/internal/config"
 	"golang.org/x/crypto/bcrypt"
-	"net/http"
 )
 
 func (wb *Web) LoginHandler(w http.ResponseWriter, r *http.Request) {
@@ -133,16 +134,6 @@ func (wb *Web) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 		"Debrids":        debrids,
 		"HasMultiDebrid": len(debrids) > 1,
 		"DownloadFolder": cfg.QBitTorrent.DownloadFolder,
-	}
-	_ = wb.templates.ExecuteTemplate(w, "layout", data)
-}
-
-func (wb *Web) RepairHandler(w http.ResponseWriter, r *http.Request) {
-	cfg := config.Get()
-	data := map[string]interface{}{
-		"URLBase": cfg.URLBase,
-		"Page":    "repair",
-		"Title":   "Repair",
 	}
 	_ = wb.templates.ExecuteTemplate(w, "layout", data)
 }
