@@ -30,10 +30,14 @@
         window.urlBase = "{{.URLBase}}";
     </script>
 </head>
-<body class="min-h-screen bg-base-200">
+<body class="min-h-screen">
 <div class="toast-container fixed bottom-4 right-4 z-50 space-y-2"></div>
 
-{{ template "setup" . }}
+<main class="app-main px-4 py-8 md:px-8 md:py-10">
+    <div class="app-page">
+        {{ template "setup" . }}
+    </div>
+</main>
 
 <script src="{{.URLBase}}assets/js/jquery-3.7.1.min.js"></script>
 <script src="{{.URLBase}}assets/js/common.js"></script>

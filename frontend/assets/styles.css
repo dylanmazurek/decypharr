@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
 @import "./css/bootstrap-icons.css";
 
 @import "tailwindcss";
@@ -607,4 +608,243 @@ nav[aria-label="Configuration Tabs"] {
 
 .tab-button:focus:not(:focus-visible) {
     outline: none;
+}
+
+/* Shortlist-inspired shell and tokens */
+[data-theme="dark"] {
+    --b1: 240 8% 6%;
+    --b2: 240 6% 9%;
+    --b3: 240 6% 12%;
+    --bc: 40 12% 94%;
+    --p: 43 92% 55%;
+    --pc: 30 90% 8%;
+    --s: 240 5% 15%;
+    --sc: 40 10% 92%;
+    --a: 43 55% 15%;
+    --ac: 43 92% 72%;
+    --n: 240 5% 13%;
+    --nc: 40 5% 64%;
+    --su: 152 55% 45%;
+    --wa: 38 92% 52%;
+    --er: 0 72% 51%;
+    --rounded-box: 0.875rem;
+    --rounded-btn: 0.75rem;
+}
+
+body {
+    font-family: 'Manrope', 'Segoe UI', sans-serif;
+    background-color: hsl(var(--b1));
+    background-image: radial-gradient(55rem 40rem at 15% -10%, hsl(43 60% 20% / 0.14), transparent);
+    background-attachment: fixed;
+}
+
+h1,
+h2,
+h3,
+h4,
+.brand-title {
+    font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+}
+
+.app-shell {
+    min-height: 100vh;
+}
+
+.app-sidebar {
+    background: hsl(var(--b2) / 0.82);
+    border-right: 1px solid hsl(var(--bc) / 0.12);
+    backdrop-filter: blur(10px);
+}
+
+.app-mobile-bar {
+    background: hsl(var(--b2) / 0.85);
+    border-bottom: 1px solid hsl(var(--bc) / 0.12);
+    backdrop-filter: blur(10px);
+}
+
+.app-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.app-nav-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.62rem 0.8rem;
+    border-radius: 0.72rem;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: hsl(var(--bc) / 0.62);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.app-nav-link::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 0;
+    height: 1.25rem;
+    opacity: 0;
+    border-radius: 0 9999px 9999px 0;
+    background: hsl(var(--p));
+    transform: translateY(-50%);
+    transition: width 0.2s ease, opacity 0.2s ease;
+}
+
+.app-nav-link:hover {
+    background: hsl(var(--n));
+    color: hsl(var(--bc));
+}
+
+.app-nav-link.active {
+    background: hsl(var(--a));
+    color: hsl(var(--ac));
+}
+
+.app-nav-link.active::before {
+    width: 0.24rem;
+    opacity: 1;
+}
+
+.app-main {
+    min-width: 0;
+    width: 100%;
+}
+
+.app-page {
+    max-width: 1800px;
+    margin: 0 auto;
+    animation: fadeInUp 0.35s ease-out;
+}
+
+.app-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.4rem;
+}
+
+.app-page-headline {
+    display: flex;
+    min-width: 16rem;
+    flex: 1;
+    align-items: flex-start;
+    gap: 0.8rem;
+}
+
+.app-page-icon {
+    margin-top: 0.1rem;
+    display: grid;
+    height: 2.5rem;
+    width: 2.5rem;
+    place-items: center;
+    border-radius: 0.7rem;
+    border: 1px solid hsl(var(--bc) / 0.14);
+    background: hsl(var(--b3));
+    color: hsl(var(--p));
+}
+
+.app-page-title {
+    font-size: 1.58rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+}
+
+.app-page-subtitle {
+    font-size: 0.88rem;
+    color: hsl(var(--bc) / 0.6);
+}
+
+.card {
+    border: 1px solid hsl(var(--bc) / 0.11);
+    background: hsl(var(--b2));
+    box-shadow: 0 10px 30px rgb(2 6 23 / 0.2);
+}
+
+.table thead tr {
+    background: hsl(var(--n));
+}
+
+.input,
+.select,
+.textarea,
+.file-input {
+    border-color: hsl(var(--bc) / 0.15);
+    background: hsl(var(--n));
+}
+
+.btn.btn-primary {
+    background: hsl(var(--p));
+    border-color: hsl(var(--p));
+    color: hsl(var(--pc));
+}
+
+.btn.btn-primary:hover {
+    filter: brightness(1.04);
+}
+
+.auth-wrap {
+    min-height: 72vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.auth-card {
+    width: 100%;
+    border: 1px solid hsl(var(--bc) / 0.12);
+    background: hsl(var(--b2));
+}
+
+.mobile-nav-backdrop {
+    animation: fadeIn 0.2s ease-out;
+}
+
+.mobile-nav-panel {
+    animation: slideInLeft 0.22s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-16px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@media (max-width: 768px) {
+    .app-page-title {
+        font-size: 1.33rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-page,
+    .mobile-nav-backdrop,
+    .mobile-nav-panel {
+        animation: none !important;
+    }
 }

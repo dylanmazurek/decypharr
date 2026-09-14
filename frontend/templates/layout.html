@@ -1,4 +1,5 @@
 {{ define "layout" }}
+{{ $isAuthPage := or (eq .Page "login") (eq .Page "register") }}
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -32,150 +33,242 @@
         window.urlBase = "{{.URLBase}}";
     </script>
 </head>
-<body class="min-h-screen bg-base-200 flex flex-col">
+<body class="min-h-screen">
 <div class="toast-container fixed bottom-4 right-4 z-50 space-y-2">
 </div>
 
-<header class="navbar bg-base-100 shadow-lg sticky top-0 z-40 backdrop-blur-sm">
-    <div class="navbar-start">
-        <div class="dropdown">
-            <div tabindex="0" role="button" class="btn btn-ghost lg:hidden">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16"/>
-                </svg>
-            </div>
-            <ul class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300">
-                <li><a href="{{.URLBase}}" class="{{if eq .Page " index"}}menu-active{{end}}">
-                    <i class="bi bi-grid-3x3-gap text-primary"></i>Dashboard
-                    </a></li>
-                <li><a href="{{.URLBase}}download" class="{{if eq .Page " download"}}menu-active{{end}}">
-                    <i class="bi bi-cloud-download text-secondary"></i>Download
-                    </a></li>
-                <li><a href="{{.URLBase}}browse" class="{{if eq .Page " browse"}}menu-active{{end}}">
-                    <i class="bi bi-folder2-open text-primary"></i>Browse
-                    </a></li>
-                <li><a href="{{.URLBase}}repair" class="{{if eq .Page " repair"}}menu-active{{end}}">
-                    <i class="bi bi-wrench-adjustable text-accent"></i>Repair
-                    </a></li>
-                <li><a href="{{.URLBase}}settings" class="{{if eq .Page " config"}}menu-active{{end}}">
-                    <i class="bi bi-gear text-info"></i>Settings
-                    </a></li>
-                <li><a href="{{.URLBase}}logs" target="_blank">
-                    <i class="bi bi-journal-text text-warning"></i>Logs
-                </a></li>
-            </ul>
-        </div>
-        <a class="btn btn-ghost text-xl font-bold text-primary group" href="{{.URLBase}}">
-            <img src="{{.URLBase}}images/logo.png" alt="Decypharr Logo" class="w-8 h-8 inline-block mr-2">
-            <span class="hidden sm:inline bg-clip-text">Decypharr</span>
+{{ if $isAuthPage }}
+<main class="app-main px-4 py-8 md:px-8 md:py-10">
+    <div class="app-page">
+        {{ if eq .Page "login" }}
+        {{ template "login" . }}
+        {{ else if eq .Page "register" }}
+        {{ template "register" . }}
+        {{ else }}
+        <div class="alert alert-error">Unknown authentication page.</div>
+        {{ end }}
+    </div>
+</main>
+{{ else }}
+<div class="app-shell flex min-h-screen flex-col md:flex-row">
+    <header class="app-mobile-bar sticky top-0 z-30 flex items-center justify-between px-4 py-3 md:hidden">
+        <a href="{{.URLBase}}" class="app-brand brand-title text-base-content">
+            <img src="{{.URLBase}}images/logo.png" alt="Decypharr Logo" class="h-7 w-7 rounded-md">
+            <span>Decypharr</span>
         </a>
-    </div>
+        <div class="flex items-center gap-1">
+            <a href="{{.URLBase}}stats" class="btn btn-ghost btn-sm" aria-label="Stats">
+                <i class="bi bi-graph-up"></i>
+            </a>
+            <label class="swap swap-rotate btn btn-ghost btn-sm btn-square" aria-label="Toggle theme">
+                <input type="checkbox" class="theme-controller" id="mobileThemeToggle"/>
+                <i class="swap-off bi bi-sun text-warning"></i>
+                <i class="swap-on bi bi-moon-stars text-info"></i>
+            </label>
+            <button type="button" class="btn btn-ghost btn-sm btn-square" id="mobileNavOpen" aria-label="Open menu"
+                    aria-expanded="false" aria-controls="mobileNavPanel">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </header>
 
-    <div class="navbar-center hidden lg:flex">
-        <ul class="menu menu-horizontal px-1 gap-1">
-            <li><a href="{{.URLBase}}" class="{{if eq .Page " index"}}menu-active{{end}} tooltip tooltip-bottom"
-                data-tip="Dashboard">
-                <i class="bi bi-grid-3x3-gap"></i>
-                <span class="hidden xl:inline">Dashboard</span>
-                </a></li>
-            <li><a href="{{.URLBase}}download" class="{{if eq .Page " download"}}menu-active{{end}} tooltip
-                tooltip-bottom" data-tip="Add Downloads">
-                <i class="bi bi-cloud-download"></i>
-                <span class="hidden xl:inline">Download</span>
-                </a></li>
-            <li><a href="{{.URLBase}}browse" class="{{if eq .Page " browse"}}menu-active{{end}} tooltip tooltip-bottom"
-                data-tip="Browse Torrents">
-                <i class="bi bi-folder2-open"></i>
-                <span class="hidden xl:inline">Browse</span>
-                </a></li>
-            <li><a href="{{.URLBase}}repair" class="{{if eq .Page " repair"}}menu-active{{end}} tooltip tooltip-bottom"
-                data-tip="Repair Media">
-                <i class="bi bi-wrench-adjustable"></i>
-                <span class="hidden xl:inline">Repair</span>
-                </a></li>
-            <li><a href="{{.URLBase}}settings" class="{{if eq .Page " config"}}menu-active{{end}} tooltip
-                tooltip-bottom" data-tip="Settings">
-                <i class="bi bi-gear"></i>
-                <span class="hidden xl:inline">Settings</span>
-                </a></li>
-            <li><a href="{{.URLBase}}debug/logs" target="_blank" class="tooltip tooltip-bottom" data-tip="System Logs">
-                <i class="bi bi-journal-text"></i>
-                <span class="hidden xl:inline">Logs</span>
-            </a></li>
-        </ul>
-    </div>
-
-    <div class="navbar-end">
-        <div class="flex items-center gap-3">
-            <div class="tooltip tooltip-left">
-                <label class="swap swap-rotate btn btn-ghost btn-circle hover:bg-base-300 transition-colors">
-                    <input type="checkbox" id="themeToggle" class="theme-controller"/>
-                    <i class="swap-off bi bi-sun text-lg text-warning"></i>
-                    <i class="swap-on bi bi-moon-stars text-lg text-info"></i>
-                </label>
+    <div id="mobileNavBackdrop" class="mobile-nav-backdrop fixed inset-0 z-50 hidden bg-black/50 md:hidden"></div>
+    <aside id="mobileNavPanel"
+           class="mobile-nav-panel fixed inset-y-0 left-0 z-50 hidden w-72 max-w-[85%] flex-col border-r border-base-content/10 bg-base-200 md:hidden">
+        <div class="flex items-center justify-between border-b border-base-content/10 px-4 py-4">
+            <a href="{{.URLBase}}" class="app-brand brand-title">
+                <img src="{{.URLBase}}images/logo.png" alt="Decypharr Logo" class="h-8 w-8 rounded-md">
+                <span>Decypharr</span>
+            </a>
+            <button type="button" id="mobileNavClose" class="btn btn-ghost btn-sm btn-square" aria-label="Close menu">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <nav aria-label="Main" class="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
+            <a href="{{.URLBase}}" class="app-nav-link {{if eq .Page "index"}}active{{end}}"><i class="bi bi-grid-3x3-gap"></i>Dashboard</a>
+            <a href="{{.URLBase}}download" class="app-nav-link {{if eq .Page "download"}}active{{end}}"><i class="bi bi-cloud-download"></i>Download</a>
+            <a href="{{.URLBase}}browse" class="app-nav-link {{if eq .Page "browse"}}active{{end}}"><i class="bi bi-folder2-open"></i>Browse</a>
+            <a href="{{.URLBase}}repair" class="app-nav-link {{if eq .Page "repair"}}active{{end}}"><i class="bi bi-wrench-adjustable"></i>Repair</a>
+            <a href="{{.URLBase}}settings" class="app-nav-link {{if eq .Page "config"}}active{{end}}"><i class="bi bi-gear"></i>Settings</a>
+            <a href="{{.URLBase}}stats" class="app-nav-link {{if eq .Page "stats"}}active{{end}}"><i class="bi bi-graph-up"></i>Stats</a>
+            <a href="{{.URLBase}}debug/logs" target="_blank" class="app-nav-link"><i class="bi bi-journal-text"></i>Logs</a>
+        </nav>
+        <div class="border-t border-base-content/10 p-3 text-xs text-base-content/70">
+            <div class="flex items-center justify-between gap-3">
+                <span>Version</span>
+                <span class="badge badge-primary badge-sm font-mono">See sidebar for version</span>
             </div>
+        </div>
+    </aside>
 
-            <div class="tooltip tooltip-left" data-tip="System Statistics">
-                <a href="{{.URLBase}}stats" class="btn btn-ghost btn-sm hover:bg-base-300 transition-colors">
-                    <i class="bi bi-graph-up text-lg"></i>
-                    <span class="hidden md:inline ml-1">Stats</span>
+    <aside class="app-sidebar sticky top-0 z-30 hidden h-screen w-60 shrink-0 flex-col md:flex">
+        <div class="flex items-center justify-between gap-2 px-5 py-5">
+            <a href="{{.URLBase}}" class="app-brand brand-title">
+                <img src="{{.URLBase}}images/logo.png" alt="Decypharr Logo" class="h-8 w-8 rounded-md">
+                <span>Decypharr</span>
+            </a>
+        </div>
+        <nav aria-label="Main" class="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3">
+            <a href="{{.URLBase}}" class="app-nav-link {{if eq .Page "index"}}active{{end}}"><i class="bi bi-grid-3x3-gap"></i>Dashboard</a>
+            <a href="{{.URLBase}}download" class="app-nav-link {{if eq .Page "download"}}active{{end}}"><i class="bi bi-cloud-download"></i>Download</a>
+            <a href="{{.URLBase}}browse" class="app-nav-link {{if eq .Page "browse"}}active{{end}}"><i class="bi bi-folder2-open"></i>Browse</a>
+            <a href="{{.URLBase}}repair" class="app-nav-link {{if eq .Page "repair"}}active{{end}}"><i class="bi bi-wrench-adjustable"></i>Repair</a>
+            <a href="{{.URLBase}}settings" class="app-nav-link {{if eq .Page "config"}}active{{end}}"><i class="bi bi-gear"></i>Settings</a>
+            <a href="{{.URLBase}}stats" class="app-nav-link {{if eq .Page "stats"}}active{{end}}"><i class="bi bi-graph-up"></i>Stats</a>
+            <a href="{{.URLBase}}debug/logs" target="_blank" class="app-nav-link"><i class="bi bi-journal-text"></i>Logs</a>
+        </nav>
+        <div class="mt-auto space-y-3 border-t border-base-content/10 px-3 py-4">
+            <div class="flex items-center gap-2">
+                <label class="swap swap-rotate btn btn-ghost btn-sm" aria-label="Toggle theme">
+                    <input type="checkbox" id="themeToggle" class="theme-controller"/>
+                    <i class="swap-off bi bi-sun text-warning"></i>
+                    <i class="swap-on bi bi-moon-stars text-info"></i>
+                </label>
+                <a href="{{.URLBase}}stats" class="btn btn-ghost btn-sm">
+                    <i class="bi bi-graph-up mr-1"></i>Stats
                 </a>
             </div>
+            <div class="px-1 text-xs text-base-content/70">Build <span id="version-badge"
+                                                                     class="badge badge-primary badge-sm font-mono">Loading...</span>
+            </div>
+            <a href="https://github.com/dylanmazurek/decypharr" target="_blank"
+               class="flex items-center gap-2 rounded-md px-1 py-0.5 text-xs text-base-content/70 hover:text-base-content">
+                <i class="bi bi-github"></i>
+                <span>GitHub</span>
+            </a>
+        </div>
+    </aside>
 
-            <div class="tooltip tooltip-left" data-tip="Current Version">
-                <div class="badge badge-primary font-mono text-xs hover:badge-primary-focus transition-colors cursor-pointer"
-                     id="version-badge">
-                    Loading...
+    <main class="app-main px-4 py-6 md:px-8 md:py-8">
+        <div class="app-page">
+            <header class="app-page-header">
+                <div class="app-page-headline">
+                    <span class="app-page-icon" aria-hidden="true">
+                        {{ if eq .Page "download" }}
+                        <i class="bi bi-cloud-download"></i>
+                        {{ else if eq .Page "browse" }}
+                        <i class="bi bi-folder2-open"></i>
+                        {{ else if eq .Page "repair" }}
+                        <i class="bi bi-wrench-adjustable"></i>
+                        {{ else if eq .Page "config" }}
+                        <i class="bi bi-gear"></i>
+                        {{ else if eq .Page "stats" }}
+                        <i class="bi bi-graph-up"></i>
+                        {{ else }}
+                        <i class="bi bi-grid-3x3-gap"></i>
+                        {{ end }}
+                    </span>
+                    <div class="min-w-0 flex-1 space-y-1">
+                        <h1 class="app-page-title">{{.Title}}</h1>
+                        <p class="app-page-subtitle">
+                            {{ if eq .Page "index" }}Monitor queue health, progress, and provider state at a glance.
+                            {{ else if eq .Page "download" }}Add magnets and links with clear status feedback.
+                            {{ else if eq .Page "browse" }}Search your available content and manage entries quickly.
+                            {{ else if eq .Page "repair" }}Run and track repair tasks across your media set.
+                            {{ else if eq .Page "config" }}Tune providers, mounts, and system preferences.
+                            {{ else if eq .Page "stats" }}Review usage and runtime performance trends.
+                            {{ else }}Manage your Decypharr instance from one place.
+                            {{ end }}
+                        </p>
+                    </div>
+                </div>
+            </header>
+
+            {{ if eq .Page "index" }}
+            {{ template "index" . }}
+            {{ else if eq .Page "browse" }}
+            {{ template "browse" . }}
+            {{ else if eq .Page "download" }}
+            {{ template "download" . }}
+            {{ else if eq .Page "repair" }}
+            {{ template "repair" . }}
+            {{ else if eq .Page "stats" }}
+            {{ template "stats" . }}
+            {{ else if eq .Page "config" }}
+            {{ template "config" . }}
+            {{ else }}
+            <div class="hero min-h-96">
+                <div class="hero-content text-center">
+                    <div class="max-w-md">
+                        <h2 class="text-5xl font-bold text-error">404</h2>
+                        <p class="py-6">Page not found. The page you're looking for doesn't exist.</p>
+                        <a href="{{.URLBase}}" class="btn btn-primary">Go Home</a>
+                    </div>
                 </div>
             </div>
+            {{ end }}
         </div>
-    </div>
-</header>
-
-<main class="flex-1 container mx-auto px-4 py-6">
-    {{ if eq .Page "index" }}
-    {{ template "index" . }}
-    {{ else if eq .Page "browse" }}
-    {{ template "browse" . }}
-    {{ else if eq .Page "download" }}
-    {{ template "download" . }}
-    {{ else if eq .Page "repair" }}
-    {{ template "repair" . }}
-    {{ else if eq .Page "stats" }}
-    {{ template "stats" . }}
-    {{ else if eq .Page "config" }}
-    {{ template "config" . }}
-    {{ else if eq .Page "login" }}
-    {{ template "login" . }}
-    {{ else if eq .Page "register" }}
-    {{ template "register" . }}
-    {{ else if eq .Page "setup" }}
-    {{ template "setup" . }}
-    {{ else }}
-    <div class="hero min-h-96">
-        <div class="hero-content text-center">
-            <div class="max-w-md">
-                <h1 class="text-5xl font-bold text-error">404</h1>
-                <p class="py-6">Page not found. The page you're looking for doesn't exist.</p>
-                <a href="{{.URLBase}}" class="btn btn-primary">Go Home</a>
-            </div>
-        </div>
-    </div>
-    {{ end }}
-</main>
-
-<footer class="footer footer-center p-6 bg-base-300 text-base-content border-t border-base-200 md:footer-horizontal">
-    <aside class="grid-flow-col gap-4">
-        <a href="https://github.com/dylanmazurek/decypharr" target="_blank"
-           class="link link-hover flex items-center gap-2 hover:text-primary transition-colors">
-            <i class="bi bi-github text-lg"></i>
-            <span>GitHub</span>
-        </a>
-    </aside>
-</footer>
+    </main>
+</div>
+{{ end }}
 
 <script src="{{.URLBase}}assets/js/jquery-3.7.1.min.js"></script>
 <script src="{{.URLBase}}assets/js/common.js"></script>
+
+<script>
+    (function () {
+        const openBtn = document.getElementById('mobileNavOpen');
+        const closeBtn = document.getElementById('mobileNavClose');
+        const backdrop = document.getElementById('mobileNavBackdrop');
+        const panel = document.getElementById('mobileNavPanel');
+        const desktopThemeToggle = document.getElementById('themeToggle');
+        const mobileThemeToggle = document.getElementById('mobileThemeToggle');
+
+        if (!openBtn || !closeBtn || !backdrop || !panel) {
+            if (desktopThemeToggle && mobileThemeToggle) {
+                const syncMobileTheme = () => {
+                    mobileThemeToggle.checked = desktopThemeToggle.checked;
+                };
+
+                mobileThemeToggle.addEventListener('change', () => {
+                    if (mobileThemeToggle.checked !== desktopThemeToggle.checked) {
+                        desktopThemeToggle.click();
+                    }
+                });
+
+                window.addEventListener('themechange', syncMobileTheme);
+                syncMobileTheme();
+            }
+            return;
+        }
+
+        const setOpen = (isOpen) => {
+            backdrop.classList.toggle('hidden', !isOpen);
+            panel.classList.toggle('hidden', !isOpen);
+            openBtn.setAttribute('aria-expanded', String(isOpen));
+            document.body.style.overflow = isOpen ? 'hidden' : '';
+        };
+
+        openBtn.addEventListener('click', () => setOpen(true));
+        closeBtn.addEventListener('click', () => setOpen(false));
+        backdrop.addEventListener('click', () => setOpen(false));
+        panel.addEventListener('click', (event) => {
+            if (event.target.closest('a')) {
+                setOpen(false);
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                setOpen(false);
+            }
+        });
+
+        if (desktopThemeToggle && mobileThemeToggle) {
+            const syncMobileTheme = () => {
+                mobileThemeToggle.checked = desktopThemeToggle.checked;
+            };
+
+            mobileThemeToggle.addEventListener('change', () => {
+                if (mobileThemeToggle.checked !== desktopThemeToggle.checked) {
+                    desktopThemeToggle.click();
+                }
+            });
+
+            window.addEventListener('themechange', syncMobileTheme);
+            syncMobileTheme();
+        }
+    })();
+</script>
 
 {{ if eq .Page "index" }}
 <script src="{{.URLBase}}assets/js/dashboard.js"></script>
