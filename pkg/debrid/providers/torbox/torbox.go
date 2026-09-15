@@ -18,7 +18,6 @@ import (
 
 	json "github.com/bytedance/sonic"
 
-	"github.com/rs/zerolog"
 	"github.com/dylanmazurek/decypharr/internal/config"
 	"github.com/dylanmazurek/decypharr/internal/customerror"
 	"github.com/dylanmazurek/decypharr/internal/logger"
@@ -27,6 +26,7 @@ import (
 	"github.com/dylanmazurek/decypharr/pkg/debrid/account"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
 	"github.com/dylanmazurek/decypharr/pkg/version"
+	"github.com/rs/zerolog"
 	"go.uber.org/ratelimit"
 )
 

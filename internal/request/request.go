@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dylanmazurek/decypharr/internal/logger"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/rs/zerolog"
-	"github.com/dylanmazurek/decypharr/internal/logger"
 	"go.uber.org/ratelimit"
 	"golang.org/x/net/proxy"
 )
