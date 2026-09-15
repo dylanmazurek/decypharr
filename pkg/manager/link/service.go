@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v4"
-	"github.com/rs/zerolog"
 	"github.com/dylanmazurek/decypharr/internal/customerror"
 	"github.com/dylanmazurek/decypharr/internal/utils"
 	debrid "github.com/dylanmazurek/decypharr/pkg/debrid/common"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
 	"github.com/dylanmazurek/decypharr/pkg/storage"
+	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/rs/zerolog"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -120,6 +120,7 @@ func (s *Service) getClient(provider string) (debrid.Client, error) {
 	if !ok {
 		return nil, fmt.Errorf("client for provider %s not found", provider)
 	}
+
 	return c, nil
 }
 
@@ -140,6 +141,13 @@ func (s *Service) fetchAndValidate(ctx context.Context, entry *storage.Entry, fi
 	// Check if we've already validated this link
 	if validationErr, exists := s.validated.Load(link.DownloadLink); exists {
 		if validationErr == nil {
+			// Re-fetch if the cached CDN URL has passed its declared expiry.
+			// Without this check a 3-hour TorBox CDN URL would be served from
+			// s.validated forever — bypassing the HEAD validation that would
+			// otherwise catch the expired URL.
+			if !link.ExpiresAt.IsZero() && time.Now().After(link.ExpiresAt) {
+				return s.invalidateAndRefetch(ctx, entry, link, attempt)
+			}
 			return link, nil // Already validated successfully
 		}
 		// Previous validation failed - check if we should retry

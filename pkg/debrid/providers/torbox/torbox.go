@@ -18,7 +18,6 @@ import (
 
 	json "github.com/bytedance/sonic"
 
-	"github.com/rs/zerolog"
 	"github.com/dylanmazurek/decypharr/internal/config"
 	"github.com/dylanmazurek/decypharr/internal/customerror"
 	"github.com/dylanmazurek/decypharr/internal/logger"
@@ -27,6 +26,7 @@ import (
 	"github.com/dylanmazurek/decypharr/pkg/debrid/account"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
 	"github.com/dylanmazurek/decypharr/pkg/version"
+	"github.com/rs/zerolog"
 	"go.uber.org/ratelimit"
 )
 
@@ -262,6 +262,34 @@ func (tb *Torbox) IsAvailable(hashes []string) map[string]bool {
 	return result
 }
 
+// isCached reports whether a single info hash is present in TorBox's cache.
+//
+// The second return value states whether the answer is trustworthy. A transport
+// error, a non-2xx reply or a malformed body yields (false, false), and callers
+// must not read that as "not cached": absence of information is not evidence of
+// absence. Acting on an unknown answer as though it were a negative one is how a
+// cache probe turns into a mass false-positive machine.
+//
+// IsAvailable cannot be reused for this: it skips failed batches with `continue`,
+// so a probe that failed and a hash that is genuinely absent both surface as a
+// missing map key. That distinction is the whole point here.
+func (tb *Torbox) isCached(hash string) (cached bool, known bool) {
+	if hash == "" {
+		return false, false
+	}
+	var res AvailableResponse
+	resp, err := tb.doGet("/api/torrents/checkcached", map[string]string{"hash": hash}, &res)
+	if err != nil || resp == nil || resp.StatusCode < 200 || resp.StatusCode >= 300 || res.Data == nil {
+		return false, false
+	}
+	for h, c := range *res.Data {
+		if strings.EqualFold(h, hash) && c.Size > 0 {
+			return true, true
+		}
+	}
+	return false, true
+}
+
 func (tb *Torbox) SubmitMagnet(torrent *types.Torrent) (*types.Torrent, error) {
 	var data AddMagnetResponse
 
@@ -270,6 +298,15 @@ func (tb *Torbox) SubmitMagnet(torrent *types.Torrent) (*types.Torrent, error) {
 	}
 	if !torrent.DownloadUncached {
 		formData["add_only_if_cached"] = "true"
+
+		// Ask the cache before calling createtorrent. When a release is not
+		// cached TorBox does not reply with a refusal, it does not reply at
+		// all: the request wrapper then burns ResponseHeaderTimeout (30s) per
+		// attempt and retries cfg.Retries times, so one uncached grab can cost
+		// around two minutes. The calling *arr times out well before that and
+		// records the failure against the INDEXER, which it eventually
+		// disables, for a release the indexer served perfectly well.
+			return nil, fmt.Errorf("torrent %s: %w", torrent.Name, customerror.TorrentNotCachedError)
 	}
 
 	resp, err := tb.doPostFormWithClient(tb.submissionClient(), "/api/torrents/createtorrent", formData, &data)
@@ -533,29 +570,44 @@ func (tb *Torbox) GetDownloadLink(id string, file *types.File) (types.DownloadLi
 }
 
 func (tb *Torbox) fetchDownloadLink(account *account.Account, id string, file *types.File) (types.DownloadLink, error) {
-	query := url.Values{}
-	query.Set("token", account.Token)
-	query.Set("torrent_id", id)
-	query.Set("file_id", file.Id)
-	query.Set("redirect", "true")
+	var res DownloadLinksResponse
 
-	downloadURL := fmt.Sprintf("%s/api/torrents/requestdl?%s", tb.Host, query.Encode())
+	resp, err := tb.doGet("/api/torrents/requestdl", map[string]string{
+		"token":      account.Token,
+		"torrent_id": id,
+		"file_id":    file.Id,
+	}, &res)
+	if err != nil {
+		return types.DownloadLink{}, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return types.DownloadLink{}, fmt.Errorf("torbox requestdl error: HTTP %d", resp.StatusCode)
+	}
+	if !res.Success || res.Data == nil || *res.Data == "" {
+		return types.DownloadLink{}, fmt.Errorf("torbox: empty CDN URL from requestdl: %s", res.Detail)
+	}
+
+	// TorBox CDN URLs are valid for 3 hours. Never cache them longer than that
+	// regardless of the user's auto_expire_links_after setting, otherwise we
+	// serve stale URLs that return 403/404 from the CDN.
+	const torboxCDNExpiry = 3 * time.Hour
+	expiry := torboxCDNExpiry
+	if tb.autoExpiresLinksAfter > 0 && tb.autoExpiresLinksAfter < torboxCDNExpiry {
+		expiry = tb.autoExpiresLinksAfter
+	}
 
 	now := time.Now()
-
-	// Always expires
-	dl := types.DownloadLink{
+	return types.DownloadLink{
 		Filename:     file.Name,
 		Size:         file.Size,
 		Token:        tb.APIKey,
 		Link:         file.Link,
-		DownloadLink: downloadURL,
+		DownloadLink: *res.Data,
 		Debrid:       tb.config.Name,
 		Id:           file.Id,
 		Generated:    now,
-		ExpiresAt:    now.Add(tb.autoExpiresLinksAfter),
-	}
-	return dl, nil
+		ExpiresAt:    now.Add(expiry),
+	}, nil
 }
 
 func (tb *Torbox) GetTorrents() ([]*types.Torrent, error) {
