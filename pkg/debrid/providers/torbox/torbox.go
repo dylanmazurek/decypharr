@@ -306,11 +306,7 @@ func (tb *Torbox) SubmitMagnet(torrent *types.Torrent) (*types.Torrent, error) {
 		// around two minutes. The calling *arr times out well before that and
 		// records the failure against the INDEXER, which it eventually
 		// disables, for a release the indexer served perfectly well.
-		// Failing fast keeps the refusal cheap and keeps the blame off the
-		// indexer. An unknown answer falls through to the previous behaviour.
-		if cached, known := tb.isCached(torrent.InfoHash); known && !cached {
-			return nil, fmt.Errorf("torrent: %s not cached", torrent.Name)
-		}
+			return nil, fmt.Errorf("torrent %s: %w", torrent.Name, customerror.TorrentNotCachedError)
 	}
 
 	resp, err := tb.doPostFormWithClient(tb.submissionClient(), "/api/torrents/createtorrent", formData, &data)
