@@ -8,23 +8,20 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v4"
-	"github.com/rs/zerolog"
 	"github.com/dylanmazurek/decypharr/internal/customerror"
 	"github.com/dylanmazurek/decypharr/internal/utils"
 	debrid "github.com/dylanmazurek/decypharr/pkg/debrid/common"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
 	"github.com/dylanmazurek/decypharr/pkg/storage"
+	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/rs/zerolog"
 	"golang.org/x/sync/singleflight"
 )
 
 const (
 	MaxReinsertionAttempt = 3
-<<<<<<< HEAD
 	// maxValidatedEntries caps the validated-link memo map (see GetLink).
 	maxValidatedEntries = 8192
-=======
->>>>>>> c5121c0 (fix(link): cap requestdl calls per file with a 5-minute refetch cooldown)
 
 	// Retry config for transient errors (429, 502, 503, 504) during link validation.
 	maxRetryableAttempts = 5
@@ -123,6 +120,7 @@ func (s *Service) getClient(provider string) (debrid.Client, error) {
 	if !ok {
 		return nil, fmt.Errorf("client for provider %s not found", provider)
 	}
+
 	return c, nil
 }
 
