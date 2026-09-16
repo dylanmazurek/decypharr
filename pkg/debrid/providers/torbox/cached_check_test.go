@@ -12,8 +12,8 @@ import (
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
 )
 
-// config.Get() is reached through SubmitMagnet and calls os.Exit(1) when it
-// cannot write its file, so point it at a scratch directory before any test runs.
+// config.Get() (called by torbox.New) calls os.Exit(1) when it cannot write its file,
+// so point it at a scratch directory before any test runs.
 // os.Exit skips deferred calls, hence the explicit cleanup around m.Run().
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "decypharr-torbox-test")
