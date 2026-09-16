@@ -161,11 +161,6 @@ func (tb *Torbox) doGetWithClient(client *request.Client, endpoint string, query
 	return resp, nil
 }
 
-// doPostForm performs a POST request with form data
-func (tb *Torbox) doPostForm(endpoint string, formData map[string]string, result any) (*http.Response, error) {
-	return tb.doPostFormWithClient(tb.client, endpoint, formData, result)
-}
-
 func (tb *Torbox) doPostFormWithClient(client *request.Client, endpoint string, formData map[string]string, result any) (*http.Response, error) {
 	form := url.Values{}
 	for k, v := range formData {

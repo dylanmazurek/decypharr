@@ -1485,6 +1485,8 @@ func (dl *downloader) adjustChunkSize(chunkLen, written int64, success bool) {
 		return
 	}
 
+	_ = written
+
 	// If no data needed to be written (all cached), don't change chunk size
 	if chunkLen <= 0 {
 		return

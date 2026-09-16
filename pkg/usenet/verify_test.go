@@ -73,7 +73,9 @@ func hexPrefix(b []byte) string {
 	n := min(len(b), 8)
 	var buf bytes.Buffer
 	for _, c := range b[:n] {
-		buf.WriteString(string("0123456789abcdef"[c>>4]) + string("0123456789abcdef"[c&0xF]) + " ")
+		buf.WriteString(string("0123456789abcdef"[c>>4]))
+		buf.WriteString(string("0123456789abcdef"[c&0xF]))
+		buf.WriteString(" ")
 	}
 	return buf.String()
 }

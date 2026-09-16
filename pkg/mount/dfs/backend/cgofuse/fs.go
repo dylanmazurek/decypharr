@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v4"
-	"github.com/rs/zerolog"
 	"github.com/dylanmazurek/decypharr/internal/customerror"
 	"github.com/dylanmazurek/decypharr/pkg/manager"
 	"github.com/dylanmazurek/decypharr/pkg/mount/dfs/config"
 	"github.com/dylanmazurek/decypharr/pkg/mount/dfs/vfs"
+	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/rs/zerolog"
 	"github.com/winfsp/cgofuse/fuse"
 )
 
@@ -69,7 +69,7 @@ func (f *FS) Statfs(path string, stat *fuse.Statfs_t) int {
 func (f *FS) Getattr(path string, stat *fuse.Stat_t, fh uint64) int {
 	// Root directory
 	if path == "/" {
-		stat.Mode = fuse.S_IFDIR | 0755
+		stat.Mode = syscall.S_IFDIR | 0755
 		stat.Nlink = 2
 		stat.Uid = f.config.UID
 		stat.Gid = f.config.GID
@@ -85,7 +85,14 @@ func (f *FS) Getattr(path string, stat *fuse.Stat_t, fh uint64) int {
 	// Parse path to get torrent/file info
 	info, err := f.getFileInfo(path)
 	if err != nil {
-		return -fuse.ENOENT
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			return -int(syscall.ENOENT)
+		case errors.Is(err, os.ErrPermission):
+			return -int(syscall.EACCES)
+		default:
+			return -int(syscall.EIO)
+		}
 	}
 
 	if info.IsDir() {
@@ -129,7 +136,7 @@ func (f *FS) Readdir(path string, fill func(name string, stat *fuse.Stat_t, ofst
 	// Parse path to determine level
 	parts := splitPath(path)
 	if len(parts) == 0 {
-		return -fuse.ENOENT
+		return -int(syscall.ENOENT)
 	}
 
 	groupOrTorrent := parts[0]
@@ -191,7 +198,7 @@ func (f *FS) entryStat(info *manager.FileInfo) *fuse.Stat_t {
 
 // CreateEx is required by fuse.FileSystemOpenEx but this is a read-only filesystem
 func (f *FS) CreateEx(path string, mode uint32, fi *fuse.FileInfo_t) int {
-	return -fuse.EACCES
+	return -int(syscall.EACCES)
 }
 
 // OpenEx opens a file with extended info (implements fuse.FileSystemOpenEx)
@@ -201,16 +208,16 @@ func (f *FS) OpenEx(path string, fi *fuse.FileInfo_t) int {
 
 	// Check if read-only access
 	if fi.Flags&(os.O_WRONLY|os.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0 {
-		return -fuse.EACCES
+		return -int(syscall.EACCES)
 	}
 
 	info, err := f.getFileInfo(path)
 	if err != nil {
-		return -fuse.ENOENT
+		return -int(syscall.ENOENT)
 	}
 
 	if info.IsDir() {
-		return -fuse.EISDIR
+		return -int(syscall.EISDIR)
 	}
 
 	var reader *vfs.StreamingFile
@@ -220,7 +227,7 @@ func (f *FS) OpenEx(path string, fi *fuse.FileInfo_t) int {
 		stream, err := f.vfs.GetFile(info)
 		if err != nil {
 			f.logger.Error().Err(err).Str("path", path).Msg("Failed to get DFS stream file")
-			return -fuse.EIO
+			return -int(syscall.EIO)
 		}
 		reader = stream
 	}
@@ -247,7 +254,7 @@ func (f *FS) Read(path string, buff []byte, off int64, fh uint64) int {
 
 	handle := f.handles.Get(fh)
 	if handle == nil {
-		return -fuse.EBADF
+		return -int(syscall.EBADF)
 	}
 
 	// Check bounds
@@ -272,7 +279,7 @@ func (f *FS) Read(path string, buff []byte, off int64, fh uint64) int {
 	}
 
 	if handle.reader == nil {
-		return -fuse.EIO
+		return -int(syscall.EIO)
 	}
 
 	readCtx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -282,16 +289,16 @@ func (f *FS) Read(path string, buff []byte, off int64, fh uint64) int {
 	if err != nil && n == 0 {
 		switch {
 		case errors.Is(err, syscall.EBADF):
-			return -fuse.EBADF
+			return -int(syscall.EBADF)
 		case errors.Is(err, io.EOF):
 			// EOF is not an error for FUSE Read
 			return 0
 		case errors.Is(err, context.DeadlineExceeded):
-			return -fuse.ETIMEDOUT
+			return -int(syscall.ETIMEDOUT)
 		case errors.Is(err, context.Canceled):
-			return -fuse.EINTR
+			return -int(syscall.EINTR)
 		default:
-			return -fuse.EIO
+			return -int(syscall.EIO)
 		}
 	}
 
@@ -318,11 +325,11 @@ func (f *FS) Opendir(path string) (int, uint64) {
 
 	info, err := f.getFileInfo(path)
 	if err != nil {
-		return -fuse.ENOENT, ^uint64(0)
+		return -int(syscall.ENOENT), ^uint64(0)
 	}
 
 	if !info.IsDir() {
-		return -fuse.ENOTDIR, ^uint64(0)
+		return -int(syscall.ENOTDIR), ^uint64(0)
 	}
 
 	return 0, 0
@@ -347,21 +354,21 @@ func (f *FS) Fsync(path string, datasync bool, fh uint64) int {
 func (f *FS) Unlink(path string) int {
 	parts := splitPath(path)
 	if len(parts) < 2 {
-		return -fuse.EPERM
+		return -int(syscall.EPERM)
 	}
 
 	info, err := f.getFileInfo(path)
 	if err != nil {
-		return -fuse.ENOENT
+		return -int(syscall.ENOENT)
 	}
 
 	if info.IsDir() {
-		return -fuse.EISDIR
+		return -int(syscall.EISDIR)
 	}
 
 	if err := f.vfs.GetManager().RemoveEntry(info); err != nil {
 		f.logger.Error().Err(err).Str("file", info.Name()).Msg("Failed to remove file")
-		return -fuse.EIO
+		return -int(syscall.EIO)
 	}
 
 	return 0
@@ -371,21 +378,21 @@ func (f *FS) Unlink(path string) int {
 func (f *FS) Rmdir(path string) int {
 	parts := splitPath(path)
 	if len(parts) < 1 {
-		return -fuse.EPERM
+		return -int(syscall.EPERM)
 	}
 
 	info, err := f.getFileInfo(path)
 	if err != nil {
-		return -fuse.ENOENT
+		return -int(syscall.ENOENT)
 	}
 
 	if !info.IsDir() {
-		return -fuse.ENOTDIR
+		return -int(syscall.ENOTDIR)
 	}
 
 	if err := f.vfs.GetManager().RemoveEntry(info); err != nil {
 		f.logger.Error().Err(err).Str("dir", info.Name()).Msg("Failed to remove directory")
-		return -fuse.EIO
+		return -int(syscall.EIO)
 	}
 
 	return 0
