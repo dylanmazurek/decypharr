@@ -1,11 +1,14 @@
 package link
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -21,6 +24,8 @@ const (
 	CategoryRefetchable
 	// CategoryAccountIssue - Disable account (bandwidth exceeded)
 	CategoryAccountIssue
+	// CategoryThrottled - Wait (Retry-After) and retry same link (429)
+	CategoryThrottled
 )
 
 // String returns a human-readable name for the error category
@@ -34,6 +39,8 @@ func (c ErrorCategory) String() string {
 		return "refetchable"
 	case CategoryAccountIssue:
 		return "account_issue"
+	case CategoryThrottled:
+		return "throttled"
 	default:
 		return "unknown"
 	}
@@ -41,9 +48,10 @@ func (c ErrorCategory) String() string {
 
 // Error represents a structured error with retry semantics
 type Error struct {
-	Err      error
-	Category ErrorCategory
-	Code     string // Error code from provider (e.g., "bandwidth_exceeded", "404")
+	Err        error
+	Category   ErrorCategory
+	Code       string        // Error code from provider (e.g., "bandwidth_exceeded", "404")
+	retryAfter time.Duration // For CategoryThrottled: server-requested wait, 0 if unspecified
 }
 
 // Error implements the error interface
@@ -146,7 +154,10 @@ func ErrorCodeToLinkError(code string) *Error {
 	case "401", "unauthorized":
 		return NewPermanentError(ErrUnauthorized, code)
 	case "404":
-		return NewPermanentError(Err404, code)
+		// CDN 404 during validation means the URL is not yet active or has expired,
+		// not that the file is permanently gone. Refetch so a fresh CDN URL is
+		// generated — the prior URL may have been fetched before the file was ready.
+		return NewRefetchableError(Err404, code)
 	// Transient provider codes have to be Refetchable, not Retryable.
 	//
 	// On the link-validation path only ShouldDisableAccount() and
@@ -195,13 +206,17 @@ func (e *Error) IsRetryable() bool {
 	return !e.IsPermanent() && e.Category != CategoryAccountIssue
 }
 
-// ShouldBackoff returns true if the error requires backoff before retry
+// ShouldBackoff returns true if the caller should wait (RetryAfter, or its own
+// backoff) and retry the same link — the link is healthy, the account is hot.
 func (e *Error) ShouldBackoff() bool {
-	return e.ShouldRetry()
+	return e.Category == CategoryThrottled
 }
 
 // RetryAfter returns the recommended wait time before retrying (0 = no specific wait)
 func (e *Error) RetryAfter() time.Duration {
+	if e.retryAfter > 0 {
+		return e.retryAfter
+	}
 	// Check for Retry-After in error code or HTTP status
 	switch e.Code {
 	case "429":
@@ -213,61 +228,73 @@ func (e *Error) RetryAfter() time.Duration {
 	}
 }
 
-// ClassifyTransportError classifies transport-level errors into link error categories
+// ClassifyTransportError classifies an error from the transport layer (dial,
+// TLS, mid-body read). Anything already classified passes through. Unknown
+// errors default to retryable: mid-stream failures are retried on a bounded
+// budget, so a wrong "retryable" costs a few attempts while a wrong
+// "permanent" kills a recoverable stream.
 func ClassifyTransportError(err error) *Error {
 	if err == nil {
 		return nil
 	}
-
-	// Check for timeout errors
+	if existing := GetLinkError(err); existing != nil {
+		return existing
+	}
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		// The caller decides whether this is its own cancellation or a
+		// stall-watchdog firing; classified retryable for the latter.
+		return NewRetryableError(err, "cancelled_or_stalled")
+	case errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, io.EOF):
+		return NewRetryableError(err, "short_body")
+	case errors.Is(err, syscall.ECONNRESET), errors.Is(err, syscall.EPIPE),
+		errors.Is(err, syscall.ECONNREFUSED):
+		return NewRetryableError(err, "connection")
+	}
 	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		return NewRetryableError(err, "timeout")
+	if errors.As(err, &netErr) {
+		return NewRetryableError(err, "network")
 	}
-
-	// Check for context cancellation
-	if errors.Is(err, errors.New("context canceled")) || errors.Is(err, errors.New("context deadline exceeded")) {
-		return NewPermanentError(err, "context_canceled")
-	}
-
-	// Check for EOF on read/write
-	if errors.Is(err, io.EOF) {
-		return NewRetryableError(err, "eof")
-	}
-
-	// Default to refetchable for unknown transport errors
-	return NewRefetchableError(err, "transport_error")
+	return NewRetryableError(err, "transport")
 }
 
-// ClassifyStreamStatus classifies HTTP status codes into link error categories
+// ClassifyStreamStatus classifies a non-2xx HTTP status observed while serving
+// bytes from a link (CDN edge), as opposed to provider-API error codes which go
+// through ErrorCodeToLinkError. At the CDN layer, 4xx auth-shaped statuses and
+// 404 usually mean the presigned link expired or rotated — refetchable. A
+// refreshed link that still fails escalates via the caller's attempt budget.
 func ClassifyStreamStatus(status int, header http.Header) *Error {
-	switch status {
-	case http.StatusOK, http.StatusPartialContent:
-		return nil // Success
-	case http.StatusUnauthorized:
-		return NewPermanentError(fmt.Errorf("HTTP %d unauthorized", status), "401")
-	case http.StatusForbidden:
-		return NewPermanentError(fmt.Errorf("HTTP %d forbidden", status), "403")
-	case http.StatusNotFound:
-		return NewPermanentError(Err404, "404")
-	case http.StatusTooManyRequests:
-		return NewRefetchableError(Err429, "429")
-	case http.StatusInternalServerError:
-		return NewRefetchableError(fmt.Errorf("HTTP 500 server error"), "500")
-	case http.StatusBadGateway:
-		return NewRefetchableError(fmt.Errorf("HTTP 502 bad gateway"), "502")
-	case http.StatusServiceUnavailable:
-		return NewRefetchableError(Err503, "503")
-	case http.StatusGatewayTimeout:
-		return NewRefetchableError(fmt.Errorf("HTTP 504 gateway timeout"), "504")
+	switch {
+	case status == http.StatusBadRequest || status == http.StatusUnauthorized ||
+		status == http.StatusForbidden || status == http.StatusGone:
+		return NewRefetchableError(fmt.Errorf("HTTP %d: link rejected", status), strconv.Itoa(status))
+	case status == http.StatusNotFound:
+		return NewRefetchableError(Err404, "404")
+	case status == http.StatusRequestedRangeNotSatisfiable:
+		return NewPermanentError(errors.New("HTTP 416: requested range not satisfiable"), "416")
+	case status == http.StatusTooManyRequests:
+		e := NewLinkError(Err429, CategoryThrottled, "429")
+		e.retryAfter = parseRetryAfter(header.Get("Retry-After"))
+		return e
+	case status >= 500:
+		return NewRetryableError(fmt.Errorf("HTTP %d", status), strconv.Itoa(status))
 	default:
-		if status >= 500 {
-			return NewRefetchableError(fmt.Errorf("HTTP %d server error", status), fmt.Sprintf("%d", status))
-		}
-		if status >= 400 {
-			// 4xx auth-shaped statuses and 404 usually mean the presigned link expired or rotated
-			return NewRefetchableError(fmt.Errorf("HTTP %d client error", status), fmt.Sprintf("%d", status))
-		}
-		return NewRetryableError(fmt.Errorf("HTTP %d", status), fmt.Sprintf("%d", status))
+		return NewPermanentError(fmt.Errorf("unexpected HTTP status %d", status), strconv.Itoa(status))
 	}
+}
+
+// parseRetryAfter parses a Retry-After header value: delta-seconds or HTTP-date.
+func parseRetryAfter(value string) time.Duration {
+	if value == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(value); err == nil && seconds >= 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	if at, err := http.ParseTime(value); err == nil {
+		if d := time.Until(at); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
