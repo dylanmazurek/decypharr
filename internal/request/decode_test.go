@@ -99,7 +99,7 @@ func TestDecodeJSONArrayStreamsItems(t *testing.T) {
 	resp := &http.Response{Body: stream}
 
 	count, bytesReadAtFirstVisit := 0, 0
-	err := DecodeJSONArray[record](resp, func(item record) error {
+	err := DecodeJSONArray(resp, func(item record) error {
 		if item.ID <= 0 {
 			t.Fatalf("item = %#v", item)
 		}
@@ -127,7 +127,7 @@ func TestDecodeJSONArrayRejectsInvalidEnvelope(t *testing.T) {
 		`[{"id":1}] {"unexpected":true}`,
 	} {
 		resp := &http.Response{Body: io.NopCloser(strings.NewReader(body))}
-		if err := DecodeJSONArray[record](resp, func(record) error { return nil }); err == nil {
+		if err := DecodeJSONArray(resp, func(record) error { return nil }); err == nil {
 			t.Fatalf("body %q: want an error", body)
 		}
 	}
@@ -136,7 +136,7 @@ func TestDecodeJSONArrayRejectsInvalidEnvelope(t *testing.T) {
 func TestDecodeJSONArrayReturnsVisitorError(t *testing.T) {
 	want := errors.New("stop visiting")
 	resp := &http.Response{Body: io.NopCloser(strings.NewReader(`[{"id":1},{"id":2}]`))}
-	err := DecodeJSONArray[record](resp, func(record) error { return want })
+	err := DecodeJSONArray(resp, func(record) error { return want })
 	if !errors.Is(err, want) {
 		t.Fatalf("err = %v, want %v", err, want)
 	}
@@ -144,7 +144,7 @@ func TestDecodeJSONArrayReturnsVisitorError(t *testing.T) {
 
 func TestDecodeJSONArrayAcceptsNull(t *testing.T) {
 	resp := &http.Response{Body: io.NopCloser(strings.NewReader(`null`))}
-	if err := DecodeJSONArray[record](resp, func(record) error {
+	if err := DecodeJSONArray(resp, func(record) error {
 		t.Fatal("visited an item for a null array")
 		return nil
 	}); err != nil {
@@ -221,7 +221,7 @@ func BenchmarkDecodeJSONArray(b *testing.B) {
 					Body:          &body{data: data, chunk: 16 << 10},
 				}
 				count := 0
-				if err := DecodeJSONArray[record](resp, func(record) error {
+				if err := DecodeJSONArray(resp, func(record) error {
 					count++
 					return nil
 				}); err != nil {
