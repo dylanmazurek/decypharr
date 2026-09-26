@@ -2,7 +2,7 @@
 <div class="space-y-4">
     <!-- Breadcrumb Navigation -->
     <div class="card bg-base-100 shadow-xl">
-        <div class="card-header">
+        <div class="card-body p-0">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-6 border-b border-base-200">
                 <h5 class="card-title">
                     <div class="breadcrumbs text-sm">
@@ -66,9 +66,10 @@
     <!-- File Browser Table -->
     <div class="card bg-base-100 shadow-xl">
         <div class="card-body p-0">
-            <table class="table table-hover">
-                <thead class="bg-base-200">
-                <tr>
+            <div class="overflow-x-auto">
+                <table class="table table-hover">
+                    <thead class="bg-base-200">
+                    <tr>
                     <th class="w-12">
                         <label class="cursor-pointer">
                             <input type="checkbox" class="checkbox checkbox-sm checkbox-primary" id="selectAllCheckbox">
@@ -113,12 +114,13 @@
                         <i class="bi bi-heart-pulse"></i> Health
                     </th>
                     <th class="font-semibold w-32">Actions</th>
-                </tr>
-                </thead>
-                <tbody id="fileBrowserList">
-                <!-- Files will be loaded here -->
-                </tbody>
-            </table>
+                    </tr>
+                    </thead>
+                    <tbody id="fileBrowserList">
+                    <!-- Files will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
 
             <div class="flex flex-col sm:flex-row justify-between items-center p-6 border-t border-base-200 gap-4">
                 <div class="text-sm text-base-content/70">

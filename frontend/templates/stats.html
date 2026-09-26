@@ -109,15 +109,17 @@
         }
     }
 </style>
-<div class="container mx-auto">
-    <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3">
-            <h1 class="text-3xl font-bold text-primary">System Statistics</h1>
+<div class="space-y-6">
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body py-4 sm:py-5">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-base-content/70">Live system telemetry including runtime, queue, provider, and mount health.</p>
+                <button id="refresh-stats" class="btn btn-outline btn-sm self-start sm:self-auto">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    Refresh
+                </button>
+            </div>
         </div>
-        <button id="refresh-stats" class="btn btn-outline btn-sm">
-            <i class="bi bi-arrow-clockwise"></i>
-            Refresh
-        </button>
     </div>
 
     <div id="loading-stats" class="text-center py-12">
