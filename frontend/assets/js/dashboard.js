@@ -304,15 +304,6 @@ class TorrentDashboard {
                         ${torrent.category ? `<span class="badge badge-sm badge-outline">${this.escapeHtml(torrent.category)}</span>` : '-'}
                     </td>
                     <td>
-                        ${this.renderProtocolBadge(torrent.protocol)}
-                    </td>
-                    <td>
-                        ${torrent.debrid ? `<span class="badge badge-sm badge-primary">${this.escapeHtml(torrent.debrid)}</span>` : '-'}
-                    </td>
-                    <td>
-                        <span class="text-sm">${torrent.num_seeds || 0}</span>
-                    </td>
-                    <td>
                         ${this.renderStateBadge(torrent.state)}
                     </td>
                     <td>
@@ -358,20 +349,6 @@ class TorrentDashboard {
 
         const s = stateMap[state] || {class: 'badge-ghost', text: state};
         return `<span class="badge ${s.class} badge-sm">${s.text}</span>`;
-    }
-
-    renderProtocolBadge(protocol) {
-        const protocolMap = {
-            'torrent': {class: 'badge-accent', icon: 'bi-magnet', text: 'Torrent'},
-            'nzb': {class: 'badge-secondary', icon: 'bi-newspaper', text: 'Usenet'}
-        };
-
-        const p = protocolMap[protocol] || {
-            class: 'badge-ghost',
-            icon: 'bi-question-circle',
-            text: protocol || 'Unknown'
-        };
-        return `<span class="badge ${p.class} badge-sm"><i class="${p.icon} mr-1"></i>${p.text}</span>`;
     }
 
     renderPagination() {
@@ -431,6 +408,7 @@ class TorrentDashboard {
         } else {
             this.state.selectedEntries.clear();
         }
+
         this.renderTorrents();
         this.updateSelectionUI();
     }
@@ -441,6 +419,7 @@ class TorrentDashboard {
         } else {
             this.state.selectedEntries.delete(hash);
         }
+        
         this.updateSelectionUI();
     }
 
