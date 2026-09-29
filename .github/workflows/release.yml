@@ -1,8 +1,17 @@
 name: release
 
 on:
-  release:
-    types: [published]
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Manual version override (e.g. 1.2.0 or v1.2.0)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -15,68 +24,61 @@ env:
   RCLONE_VERSION: 1.69.3
 
 jobs:
-  # Determine release channel from tag
   prepare:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
       channel: ${{ steps.meta.outputs.channel }}
-      docker_latest: ${{ steps.meta.outputs.docker_latest }}
     steps:
-      - name: Extract version and channel
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Determine version and tag
         id: meta
-        env:
-          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
-          TAG="$TAG_NAME"
-          if [ -z "$TAG" ]; then
-            echo "Release event missing tag_name" >&2
-            exit 1
-          fi
+          git fetch --tags --force
 
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          VERSION="${TAG#v}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          if [[ "$TAG" == *"-beta"* ]]; then
-            echo "channel=beta" >> "$GITHUB_OUTPUT"
-            echo "docker_latest=false" >> "$GITHUB_OUTPUT"
-          elif [[ "$TAG" == *"-rc"* ]]; then
-            echo "channel=rc" >> "$GITHUB_OUTPUT"
-            echo "docker_latest=false" >> "$GITHUB_OUTPUT"
+          OVERRIDE_VER="${{ inputs.version }}"
+          if [ -n "$OVERRIDE_VER" ]; then
+            TAG="v${OVERRIDE_VER#v}"
+            VERSION="${TAG#v}"
           else
-            echo "channel=stable" >> "$GITHUB_OUTPUT"
-            echo "docker_latest=true" >> "$GITHUB_OUTPUT"
+            LATEST_TAG=$(git tag --merged HEAD --list 'v*.*.*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+            if [ -z "$LATEST_TAG" ]; then
+              TAG="v1.0.0"
+              VERSION="1.0.0"
+            else
+              VERSION="${LATEST_TAG#v}"
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+              PATCH=$((PATCH + 1))
+              VERSION="${MAJOR}.${MINOR}.${PATCH}"
+              TAG="v${VERSION}"
+            fi
           fi
 
-  # Build Linux binaries (CGO required for FUSE + rapidyenc)
+          echo "Determined release: tag=${TAG}, version=${VERSION}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "channel=stable" >> "$GITHUB_OUTPUT"
+
+  # Build Linux amd64 binary (CGO required for FUSE + rapidyenc)
   build-linux:
     runs-on: ubuntu-latest
     needs: prepare
-    name: build-linux (${{ matrix.arch }})
-    strategy:
-      matrix:
-        include:
-          - arch: amd64
-            cc: gcc
-            cxx: g++
-          - arch: arm64
-            cc: zig cc -target aarch64-linux-gnu
-            cxx: zig c++ -target aarch64-linux-gnu
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-
-      - name: Install Zig
-        if: matrix.arch == 'arm64'
-        uses: mlugg/setup-zig@v2.2.1
-        with:
-          version: 0.14.1
 
       - name: Install libfuse-dev
         run: sudo apt-get update && sudo apt-get install -y libfuse-dev
@@ -85,97 +87,9 @@ jobs:
         env:
           CGO_ENABLED: 1
           GOOS: linux
-          GOARCH: ${{ matrix.arch }}
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-          CHANNEL: ${{ needs.prepare.outputs.channel }}
-        run: |
-          mkdir -p dist
-          go build -trimpath -tags disable_libutp \
-            -ldflags="-s -w -X ${LDFLAGS_PKG}.Version=${VERSION} -X ${LDFLAGS_PKG}.Channel=${CHANNEL}" \
-            -o dist/decypharr
-
-      - name: Package
-        run: |
-          ARCH="${{ matrix.arch }}"
-          [ "$ARCH" = "amd64" ] && ARCH="x86_64"
-          tar czf "dist/decypharr_linux_${ARCH}.tar.gz" -C dist decypharr
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: linux-${{ matrix.arch }}
-          path: dist/decypharr_linux_*.tar.gz
-
-  # Build Windows binary (no CGO — cgofuse uses syscall.LoadLibrary for WinFsp)
-  build-windows:
-    runs-on: ubuntu-latest
-    if: false
-    needs: prepare
-    name: build-windows (disabled)
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Build
-        env:
-          CGO_ENABLED: 0
-          GOOS: windows
           GOARCH: amd64
-          VERSION: ${{ needs.prepare.outputs.version }}
-          CHANNEL: ${{ needs.prepare.outputs.channel }}
-        run: |
-          mkdir -p dist
-          go build -trimpath -tags disable_libutp \
-            -ldflags="-s -w -X ${LDFLAGS_PKG}.Version=${VERSION} -X ${LDFLAGS_PKG}.Channel=${CHANNEL}" \
-            -o dist/decypharr.exe
-
-      - name: Package
-        working-directory: dist
-        run: zip decypharr_windows_x86_64.zip decypharr.exe
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: windows-amd64
-          path: dist/decypharr_windows_x86_64.zip
-
-  # Build macOS binaries (CGO required, needs macFUSE headers)
-  build-darwin:
-    runs-on: macos-latest
-    if: false
-    needs: prepare
-    name: build-darwin (disabled)
-    strategy:
-      matrix:
-        include:
-          - arch: amd64
-            label: x86_64
-          - arch: arm64
-            label: arm64
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Install macFUSE headers
-        run: brew install macfuse
-
-      - name: Build
-        env:
-          CGO_ENABLED: 1
-          GOOS: darwin
-          GOARCH: ${{ matrix.arch }}
+          CC: gcc
+          CXX: g++
           VERSION: ${{ needs.prepare.outputs.version }}
           CHANNEL: ${{ needs.prepare.outputs.channel }}
         run: |
@@ -185,23 +99,23 @@ jobs:
             -o dist/decypharr
 
       - name: Package
-        run: tar czf "dist/decypharr_darwin_${{ matrix.label }}.tar.gz" -C dist decypharr
+        run: |
+          tar czf "dist/decypharr_linux_x86_64.tar.gz" -C dist decypharr
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: darwin-${{ matrix.arch }}
-          path: dist/decypharr_darwin_*.tar.gz
+          name: linux-amd64
+          path: dist/decypharr_linux_x86_64.tar.gz
 
-  # Build and push multi-platform Docker images
+  # Build and push Linux amd64 Docker image
   docker:
     runs-on: ubuntu-latest
     needs: prepare
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -217,7 +131,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           build-args: |
             VERSION=${{ needs.prepare.outputs.version }}
@@ -225,35 +139,37 @@ jobs:
             RCLONE_VERSION=${{ env.RCLONE_VERSION }}
           tags: |
             ${{ env.REGISTRY_GHCR }}:${{ needs.prepare.outputs.tag }}
+            ${{ env.REGISTRY_GHCR }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Tag stable as latest
-        if: needs.prepare.outputs.docker_latest == 'true'
-        run: |
-          docker buildx imagetools create \
-            --tag "${{ env.REGISTRY_GHCR }}:latest" \
-            "${{ env.REGISTRY_GHCR }}:${{ needs.prepare.outputs.tag }}"
-
-  # Create GitHub release with all binaries
+  # Create GitHub release with amd64 binary
   release:
     runs-on: ubuntu-latest
     needs: [ prepare, build-linux, docker ]
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
           fetch-depth: 0
 
-      - name: Download Linux release artifacts
+      - name: Download Linux release artifact
         uses: actions/download-artifact@v8
         with:
-          pattern: linux-*
+          name: linux-amd64
           path: dist
-          merge-multiple: true
 
-      - name: Upload release assets
+      - name: Create GitHub Release and Tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare.outputs.tag }}
+          TARGET_COMMIT: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
         run: |
-          gh release upload "$TAG" dist/* --clobber
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* \
+              --target "$TARGET_COMMIT" \
+              --title "$TAG" \
+              --generate-notes
+          fi
