@@ -301,7 +301,11 @@ func (tb *Torbox) SubmitMagnet(torrent *types.Torrent) (*types.Torrent, error) {
 		// around two minutes. The calling *arr times out well before that and
 		// records the failure against the INDEXER, which it eventually
 		// disables, for a release the indexer served perfectly well.
+		// Failing fast keeps the refusal cheap and keeps the blame off the
+		// indexer. An unknown answer falls through to the previous behaviour.
+		if cached, known := tb.isCached(torrent.InfoHash); known && !cached {
 			return nil, fmt.Errorf("torrent %s: %w", torrent.Name, customerror.TorrentNotCachedError)
+		}
 	}
 
 	resp, err := tb.doPostFormWithClient(tb.submissionClient(), "/api/torrents/createtorrent", formData, &data)
@@ -328,23 +332,25 @@ func (tb *Torbox) getTorboxStatus(status string, finished bool) types.TorrentSta
 	if finished {
 		return types.TorrentStatusDownloaded
 	}
-	downloading := []string{"paused", "downloading",
-		"checkingResumeData", "metaDL", "pausedUP", "queuedUP", "checkingUP",
-		"forcedUP", "allocating", "downloading", "metaDL", "pausedDL",
-		"queuedDL", "checkingDL", "forcedDL", "checkingResumeData", "moving",
-		"incomplete",
+	cleanStatus := strings.ToLower(strings.TrimSpace(regexp.MustCompile(`\s*\(.*?\)\s*`).ReplaceAllString(status, "")))
+
+	downloading := []string{
+		"paused", "pauseddl", "pausedup",
+		"stopped", "stoppeddl", "stoppedup",
+		"downloading", "allocating", "moving", "incomplete",
+		"metadl", "checkingresumedata", "checking", "checkingdl", "checkingup",
+		"forceddl", "forcedup", "queued", "queueddl", "queuedup",
+		"stalled", "stalleddl", "stalledup", "unknown",
 	}
 
 	downloaded := []string{
-		"completed", "cached", "uploading", "downloaded",
+		"completed", "cached", "uploading", "downloaded", "seeding",
 	}
 
-	status = regexp.MustCompile(`\s*\(.*?\)\s*`).ReplaceAllString(status, "")
-
 	switch {
-	case utils.Contains(downloading, status):
+	case utils.Contains(downloading, cleanStatus):
 		return types.TorrentStatusDownloading
-	case utils.Contains(downloaded, status):
+	case utils.Contains(downloaded, cleanStatus):
 		return types.TorrentStatusDownloaded
 	default:
 		return types.TorrentStatusError
@@ -457,12 +463,23 @@ func (tb *Torbox) updateTorrentWithClient(client *request.Client, t *types.Torre
 		return fmt.Errorf("torbox API error: Status: %d", resp.StatusCode)
 	}
 	data := res.Data
+	if data == nil {
+		return fmt.Errorf("error getting torrent: response data is nil")
+	}
 	name := data.Name
 
 	t.Name = name
 	t.Bytes = data.Size
 	t.Progress = data.Progress * 100
 	t.Status = tb.getTorboxStatus(data.DownloadState, data.DownloadFinished)
+	if t.Status == types.TorrentStatusError {
+		tb.logger.Warn().
+			Str("torrent_id", t.Id).
+			Str("name", t.Name).
+			Str("download_state", data.DownloadState).
+			Bool("download_finished", data.DownloadFinished).
+			Msg("Torbox torrent mapped to error status")
+	}
 	t.Speed = data.DownloadSpeed
 	t.Seeders = data.Seeds
 	t.Filename = name
@@ -511,25 +528,28 @@ func (tb *Torbox) updateTorrentWithClient(client *request.Client, t *types.Torre
 }
 
 func (tb *Torbox) CheckStatus(torrent *types.Torrent) (*types.Torrent, error) {
-	for {
-		err := tb.updateTorrentWithClient(tb.submissionClient(), torrent)
+	err := tb.updateTorrentWithClient(tb.submissionClient(), torrent)
 
-		if err != nil || torrent == nil {
-			return torrent, err
-		}
+	if err != nil || torrent == nil {
+		return torrent, err
+	}
 
-		switch torrent.Status {
-		case types.TorrentStatusDownloaded:
-			tb.logger.Info().Msgf("Torrent: %s downloaded", torrent.Name)
-			return torrent, nil
-		case types.TorrentStatusDownloading:
-			if !torrent.DownloadUncached {
-				return torrent, fmt.Errorf("torrent %s: %w", torrent.Name, customerror.TorrentNotCachedError)
-			}
-			return torrent, nil
-		default:
-			return torrent, fmt.Errorf("torrent: %s has error", torrent.Name)
+	switch torrent.Status {
+	case types.TorrentStatusDownloaded:
+		tb.logger.Info().Msgf("Torrent: %s downloaded", torrent.Name)
+		return torrent, nil
+	case types.TorrentStatusDownloading:
+		if !torrent.DownloadUncached {
+			return torrent, fmt.Errorf("torrent %s: %w", torrent.Name, customerror.TorrentNotCachedError)
 		}
+		return torrent, nil
+	default:
+		tb.logger.Warn().
+			Str("torrent_id", torrent.Id).
+			Str("name", torrent.Name).
+			Str("status", string(torrent.Status)).
+			Msg("Torbox torrent in error status")
+		return torrent, fmt.Errorf("torrent: %s has error status: %s", torrent.Name, torrent.Status)
 	}
 }
 

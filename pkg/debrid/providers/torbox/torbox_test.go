@@ -197,3 +197,45 @@ func testTorbox(host string) *Torbox {
 		config: config.Debrid{Name: "torbox"},
 	}
 }
+
+func TestGetTorboxStatus(t *testing.T) {
+	tb := testTorbox("")
+
+	tests := []struct {
+		state    string
+		finished bool
+		want     types.TorrentStatus
+	}{
+		{state: "downloading", finished: false, want: types.TorrentStatusDownloading},
+		{state: "stalled (no seeds)", finished: false, want: types.TorrentStatusDownloading},
+		{state: "stalled", finished: false, want: types.TorrentStatusDownloading},
+		{state: "stalledDL", finished: false, want: types.TorrentStatusDownloading},
+		{state: "stalledUP", finished: false, want: types.TorrentStatusDownloading},
+		{state: "paused", finished: false, want: types.TorrentStatusDownloading},
+		{state: "pausedDL", finished: false, want: types.TorrentStatusDownloading},
+		{state: "stopped", finished: false, want: types.TorrentStatusDownloading},
+		{state: "stoppedDL", finished: false, want: types.TorrentStatusDownloading},
+		{state: "metaDL", finished: false, want: types.TorrentStatusDownloading},
+		{state: "checkingResumeData", finished: false, want: types.TorrentStatusDownloading},
+		{state: "queued", finished: false, want: types.TorrentStatusDownloading},
+		{state: "allocating", finished: false, want: types.TorrentStatusDownloading},
+		{state: "completed", finished: false, want: types.TorrentStatusDownloaded},
+		{state: "cached", finished: false, want: types.TorrentStatusDownloaded},
+		{state: "uploading", finished: false, want: types.TorrentStatusDownloaded},
+		{state: "downloaded", finished: false, want: types.TorrentStatusDownloaded},
+		{state: "seeding", finished: false, want: types.TorrentStatusDownloaded},
+		{state: "anything", finished: true, want: types.TorrentStatusDownloaded},
+		{state: "failed (Aborted, encryption detected)", finished: false, want: types.TorrentStatusError},
+		{state: "error", finished: false, want: types.TorrentStatusError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.state, func(t *testing.T) {
+			got := tb.getTorboxStatus(tt.state, tt.finished)
+			if got != tt.want {
+				t.Errorf("getTorboxStatus(%q, %v) = %v, want %v", tt.state, tt.finished, got, tt.want)
+			}
+		})
+	}
+}
+
