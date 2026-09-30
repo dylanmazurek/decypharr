@@ -600,14 +600,17 @@ class DecypharrUtils {
 
     // Utility methods
     formatBytes(bytes) {
-        if (!bytes || bytes === 0) return '0 B';
+        if (bytes === 0) return '0 B';
+        if (!bytes || bytes < 0 || isNaN(bytes)) return '-';
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+        if (i < 0) return `${bytes} B`;
         return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
     }
 
     formatSpeed(speed) {
+        if (!speed || speed <= 0 || isNaN(speed)) return '-';
         return `${this.formatBytes(speed)}/s`;
     }
 
