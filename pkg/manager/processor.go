@@ -306,7 +306,10 @@ func (m *Manager) processQueuedTorrent(entry *storage.Entry) {
 	// Update entry progress
 	entry.Progress = debridTorrent.Progress / 100.0
 	entry.Speed = debridTorrent.Speed
-	entry.Size = debridTorrent.GetSize()
+	if size := debridTorrent.GetSize(); size > 0 {
+		entry.Size = size
+		entry.Bytes = size
+	}
 	entry.Seeders = debridTorrent.Seeders
 	entry.UpdatedAt = time.Now()
 
@@ -381,8 +384,10 @@ func (m *Manager) processNewTorrent(torrent *storage.Entry, debridTorrent *debri
 func applyDebridTorrentToEntry(torrent *storage.Entry, debridTorrent *debridTypes.Torrent) {
 	_ = torrent.AddTorrentProvider(debridTorrent)
 	torrent.ActiveProvider = debridTorrent.Debrid
-	torrent.Bytes = debridTorrent.GetSize()
-	torrent.Size = debridTorrent.GetSize()
+	if size := debridTorrent.GetSize(); size > 0 {
+		torrent.Bytes = size
+		torrent.Size = size
+	}
 	torrent.Name = debridTorrent.Name
 	torrent.OriginalFilename = debridTorrent.OriginalFilename
 	torrent.UpdatedAt = time.Now()

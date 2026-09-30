@@ -119,6 +119,12 @@ func (e *Entry) Validate() error {
 // safely JSON-encoded. This guards against NaN/Inf produced by division-by-zero
 // when a debrid provider reports size=0 for an in-progress torrent.
 func (e *Entry) Sanitize() {
+	if e.Size < 0 {
+		e.Size = 0
+	}
+	if e.Bytes < 0 {
+		e.Bytes = 0
+	}
 	if math.IsNaN(e.Progress) || math.IsInf(e.Progress, 0) {
 		e.Progress = 0
 	}
