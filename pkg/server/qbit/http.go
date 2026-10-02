@@ -306,14 +306,10 @@ func (q *QBit) handleSetCategory(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	category := getCategory(ctx)
 	hashes := getHashes(ctx)
-	var filterFunc func(t *storage.Entry) bool
-
-	hashSet := make(map[string]bool)
-	if len(hashes) > 0 {
-		for _, h := range hashes {
-			hashSet[h] = true
-		}
-
+	filterFunc, err := categoryHashFilter(hashes)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	updateFunc := func(t *storage.Entry) bool {
@@ -388,3 +384,11 @@ func (q *QBit) handleCreateTags(w http.ResponseWriter, r *http.Request) {
 	q.addTags(tags)
 	utils.JSONResponse(w, nil, http.StatusOK)
 }
+
+func (q *QBit) handleSetShareLimits(w http.ResponseWriter, r *http.Request) {
+	// Acknowledge setShareLimits from Sonarr/Radarr.
+	// Since Decypharr streams and manages downloads through Debrid/Usenet,
+	// torrent seeding limits are acknowledged as a no-op with HTTP 200.
+	w.WriteHeader(http.StatusOK)
+}
+
