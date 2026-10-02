@@ -388,3 +388,11 @@ func (q *QBit) handleCreateTags(w http.ResponseWriter, r *http.Request) {
 	q.addTags(tags)
 	utils.JSONResponse(w, nil, http.StatusOK)
 }
+
+func (q *QBit) handleSetShareLimits(w http.ResponseWriter, r *http.Request) {
+	// Acknowledge setShareLimits from Sonarr/Radarr.
+	// Since Decypharr streams and manages downloads through Debrid/Usenet,
+	// torrent seeding limits are acknowledged as a no-op with HTTP 200.
+	w.WriteHeader(http.StatusOK)
+}
+

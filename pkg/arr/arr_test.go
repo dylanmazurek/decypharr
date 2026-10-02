@@ -46,6 +46,34 @@ func TestSyncFromConfigPreservesResolvedHostForInvalidUpdate(t *testing.T) {
 	}
 }
 
+func TestSyncFromConfigRemovesOmittedInstances(t *testing.T) {
+	config.Reset()
+	config.SetConfigPath(t.TempDir())
+	t.Cleanup(config.Reset)
+
+	arrs := New()
+	arrs.AddOrUpdate(Arr{Name: "old-radarr", Host: "http://radarr.example:7878", Token: "token1", Source: SourceManual})
+	arrs.AddOrUpdate(Arr{Name: "sonarr", Host: "http://sonarr.example:8989", Token: "token2", Source: SourceManual})
+
+	// Renaming old-radarr to new-radarr in config should not preserve old-radarr
+	arrs.SyncFromConfig([]config.Arr{
+		{Name: "new-radarr", Host: "http://radarr.example:7878", Token: "token1"},
+		{Name: "sonarr", Host: "http://sonarr.example:8989", Token: "token2"},
+	})
+
+	if _, ok := arrs.Get("old-radarr"); ok {
+		t.Fatal("expected old-radarr to be removed after rename, but it was preserved")
+	}
+	if _, ok := arrs.Get("new-radarr"); !ok {
+		t.Fatal("expected new-radarr to be present")
+	}
+	all := arrs.All()
+	if len(all) != 2 {
+		t.Fatalf("expected 2 instances, got %d: %#v", len(all), all)
+	}
+}
+
+
 func TestArrInstanceFingerprintCanonicalizesHost(t *testing.T) {
 	first := Arr{Type: Sonarr, Host: "HTTP://Example.COM:80/sonarr/", Token: "first"}.Fingerprint()
 	second := Arr{Type: Sonarr, Host: "http://example.com/sonarr", Token: "second"}.Fingerprint()
