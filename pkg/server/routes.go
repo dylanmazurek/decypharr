@@ -2,7 +2,7 @@ package server
 
 import (
 	"net/http"
-	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -14,16 +14,23 @@ func (s *Server) WebRoutes() http.Handler {
 	r.Use(s.setupRedirectMiddleware)
 
 	// Static assets - always public
-	root := frontendRoot()
-	staticDir := filepath.Join(root, "assets", "build")
-	imagesDir := filepath.Join(root, "assets", "images")
-	r.Handle("/assets/*", http.StripPrefix(s.urlBase+"assets/", http.FileServer(http.Dir(staticDir))))
-	r.Handle("/images/*", http.StripPrefix(s.urlBase+"images/", http.FileServer(http.Dir(imagesDir))))
+	_ = s.getFrontendFS()
+	prefix := strings.TrimSuffix(s.urlBase, "/")
+
+	r.Handle("/assets/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		http.StripPrefix(prefix, http.FileServer(http.FS(s.frontendFS))).ServeHTTP(w, r)
+	}))
+	r.Handle("/images/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.StripPrefix(prefix, http.FileServer(http.FS(s.frontendFS))).ServeHTTP(w, r)
+	}))
 
 	// Public routes - no auth needed
 	r.Get("/version", s.handleGetVersion)
 	r.Get("/login", s.LoginHandler)
 	r.Post("/login", s.LoginHandler)
+	r.Get("/logout", s.LogoutHandler)
+	r.Post("/logout", s.LogoutHandler)
 	r.Get("/register", s.RegisterHandler)
 	r.Post("/register", s.RegisterHandler)
 	r.Post("/skip-auth", s.skipAuthHandler)
@@ -43,6 +50,7 @@ func (s *Server) WebRoutes() http.Handler {
 		r.Get("/repair/reacquire", s.ReacquireHandler)
 		r.Get("/stats", s.StatsHandler)
 		r.Get("/settings", s.ConfigHandler)
+		r.Get("/config", s.ConfigHandler)
 
 		// API routes
 		r.Route("/api", func(r chi.Router) {

@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	json "github.com/bytedance/sonic"
-
 	"github.com/dylanmazurek/decypharr/internal/config"
 )
 
@@ -17,37 +16,31 @@ func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	auth := cfg.GetAuth()
 	tokenOnly := auth != nil && auth.TokenOnly
 
-	if r.Method == "GET" {
-		data := map[string]any{
-			"URLBase":   cfg.URLBase,
-			"Page":      "login",
-			"Title":     "Login",
-			"TokenOnly": tokenOnly,
-		}
-		err := s.templates.ExecuteTemplate(w, "layout", data)
-		if err != nil {
-			s.logger.Warn().Err(err).Msg("error rendering /login template")
-		}
+	if r.Method == http.MethodGet {
+		s.serveSPA(w, r)
 		return
 	}
 
+	var username, password string
 	var credentials struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-
-	if err := json.ConfigDefault.NewDecoder(r.Body).Decode(&credentials); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
+	if err := json.ConfigDefault.NewDecoder(r.Body).Decode(&credentials); err == nil {
+		username = credentials.Username
+		password = credentials.Password
+	}
+	if username == "" {
+		username = r.FormValue("username")
+		password = r.FormValue("password")
 	}
 
-	username := credentials.Username
-	ok := config.VerifyAuth(credentials.Username, credentials.Password)
+	ok := config.VerifyAuth(username, password)
 	if !ok && tokenOnly {
 		// Token-only mode has no password, so the API token takes its place.
 		// This is the only way into the UI; without it the mode would lock the
 		// user out of their own instance.
-		ok = config.VerifyToken(credentials.Password)
+		ok = config.VerifyToken(password)
 		username = "token"
 	}
 	if !ok {
@@ -69,10 +62,7 @@ func (s *Server) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := s.cookie.Get(r, "auth-session")
 	session.Values["authenticated"] = false
 	session.Options.MaxAge = -1
-	err := session.Save(r, w)
-	if err != nil {
-		return
-	}
+	_ = session.Save(r, w)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
@@ -91,16 +81,8 @@ func (s *Server) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == "GET" {
-		data := map[string]any{
-			"URLBase": cfg.URLBase,
-			"Page":    "register",
-			"Title":   "registerVolume",
-		}
-		err := s.templates.ExecuteTemplate(w, "layout", data)
-		if err != nil {
-			s.logger.Warn().Err(err).Msg("error rendering /register template")
-		}
+	if r.Method == http.MethodGet {
+		s.serveSPA(w, r)
 		return
 	}
 
@@ -108,7 +90,20 @@ func (s *Server) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	confirmPassword := r.FormValue("confirmPassword")
 
-	if password != confirmPassword {
+	if username == "" {
+		var req struct {
+			Username        string `json:"username"`
+			Password        string `json:"password"`
+			ConfirmPassword string `json:"confirmPassword"`
+		}
+		if err := json.ConfigDefault.NewDecoder(r.Body).Decode(&req); err == nil {
+			username = req.Username
+			password = req.Password
+			confirmPassword = req.ConfirmPassword
+		}
+	}
+
+	if password != confirmPassword && confirmPassword != "" {
 		http.Error(w, "Passwords do not match", http.StatusBadRequest)
 		return
 	}
@@ -131,105 +126,29 @@ func (s *Server) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) IndexHandler(w http.ResponseWriter, r *http.Request) {
-	cfg := config.Get()
-	data := map[string]any{
-		"URLBase":    cfg.URLBase,
-		"Page":       "index",
-		"Title":      "Queues",
-		"SetupError": cfg.SetupError(),
-	}
-	err := s.templates.ExecuteTemplate(w, "layout", data)
-	if err != nil {
-		s.logger.Warn().Err(err).Msg("error rendering /index template")
-	}
+	s.serveSPA(w, r)
 }
 
 func (s *Server) DownloadHandler(w http.ResponseWriter, r *http.Request) {
-	cfg := config.Get()
-	debrids := make([]string, 0)
-	for _, d := range cfg.Debrids {
-		debrids = append(debrids, d.Name)
-	}
-	data := map[string]any{
-		"URLBase":                 cfg.URLBase,
-		"Page":                    "download",
-		"Title":                   "Download",
-		"Debrids":                 debrids,
-		"HasMultiDebrid":          len(debrids) > 1,
-		"downloadFolder":          cfg.DownloadFolder,
-		"alwaysRemoveTrackerURLS": cfg.AlwaysRmTrackerUrls,
-		"SetupError":              cfg.SetupError(),
-	}
-	err := s.templates.ExecuteTemplate(w, "layout", data)
-	if err != nil {
-		s.logger.Warn().Err(err).Msg("error rendering /download template")
-	}
+	s.serveSPA(w, r)
 }
 
 func (s *Server) RepairHandler(w http.ResponseWriter, r *http.Request) {
-	cfg := config.Get()
-	data := map[string]any{
-		"URLBase":    cfg.URLBase,
-		"Page":       "repair",
-		"Title":      "Repair",
-		"SetupError": cfg.SetupError(),
-	}
-	err := s.templates.ExecuteTemplate(w, "layout", data)
-	if err != nil {
-		s.logger.Warn().Err(err).Msg("error rendering /repair template")
-	}
+	s.serveSPA(w, r)
 }
 
 func (s *Server) ReacquireHandler(w http.ResponseWriter, r *http.Request) {
-	cfg := config.Get()
-	data := map[string]any{
-		"URLBase":    cfg.URLBase,
-		"Page":       "reacquire",
-		"Title":      "Reacquire",
-		"SetupError": cfg.SetupError(),
-	}
-	if err := s.templates.ExecuteTemplate(w, "layout", data); err != nil {
-		s.logger.Warn().Err(err).Msg("error rendering /reacquire template")
-	}
+	s.serveSPA(w, r)
 }
 
 func (s *Server) ConfigHandler(w http.ResponseWriter, r *http.Request) {
-	cfg := config.Get()
-	data := map[string]any{
-		"URLBase":    cfg.URLBase,
-		"Page":       "config",
-		"Title":      "Config",
-		"SetupError": cfg.SetupError(),
-	}
-	err := s.templates.ExecuteTemplate(w, "layout", data)
-	if err != nil {
-		s.logger.Warn().Err(err).Msg("error rendering /config template")
-	}
+	s.serveSPA(w, r)
 }
 
 func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
-	cfg := config.Get()
-	data := map[string]any{
-		"URLBase": cfg.URLBase,
-		"Page":    "stats",
-		"Title":   "Statistics",
-	}
-	err := s.templates.ExecuteTemplate(w, "layout", data)
-	if err != nil {
-		s.logger.Warn().Err(err).Msg("error rendering /stats template")
-	}
+	s.serveSPA(w, r)
 }
 
 func (s *Server) BrowseHandler(w http.ResponseWriter, r *http.Request) {
-	cfg := config.Get()
-	data := map[string]any{
-		"URLBase":    cfg.URLBase,
-		"Page":       "browse",
-		"Title":      "Browse Torrents",
-		"SetupError": cfg.SetupError(),
-	}
-	err := s.templates.ExecuteTemplate(w, "layout", data)
-	if err != nil {
-		s.logger.Warn().Err(err).Msg("error rendering /browse template")
-	}
+	s.serveSPA(w, r)
 }
