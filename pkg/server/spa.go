@@ -57,11 +57,13 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"urlBase":    cfg.URLBase,
-		"setupError": cfg.SetupError(),
-		"tokenOnly":  tokenOnly,
-		"needsAuth":  needsAuth,
-		"version":    version.Version,
+		"urlBase":       cfg.URLBase,
+		"setupError":    cfg.SetupError(),
+		"setupRequired": cfg.SetupError() != "",
+		"tokenOnly":     tokenOnly,
+		"needsAuth":     needsAuth,
+		"authEnabled":   needsAuth,
+		"version":       version.Version,
 	}
 	dataJSON, _ := json.ConfigDefault.Marshal(data)
 

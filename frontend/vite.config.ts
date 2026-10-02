@@ -1,6 +1,9 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import process from 'node:process';
+import { defineConfig } from 'vite';
+
+const backendTarget = process.env.BACKEND_URL || 'http://localhost:8080';
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -13,9 +16,25 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/qbittorrent': 'http://localhost:8080',
-      '/webdav': 'http://localhost:8080',
+      '/api': backendTarget,
+      '/qbittorrent': backendTarget,
+      '/webdav': backendTarget,
+      '/debug': backendTarget,
+      '/stream': backendTarget,
+      '/version': backendTarget,
+      '/login': {
+        target: backendTarget,
+        bypass: (req) => (req.method === 'GET' ? '/index.html' : undefined),
+      },
+      '/logout': backendTarget,
+      '/register': {
+        target: backendTarget,
+        bypass: (req) => (req.method === 'GET' ? '/index.html' : undefined),
+      },
+      '/setup': {
+        target: backendTarget,
+        bypass: (req) => (req.method === 'GET' ? '/index.html' : undefined),
+      },
     },
   },
 });

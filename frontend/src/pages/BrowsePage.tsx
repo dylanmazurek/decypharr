@@ -14,8 +14,9 @@ export const BrowsePage: React.FC = () => {
     setLoading(true);
     try {
       const data = await api.browse(path);
-      setItems(Array.isArray(data?.items) ? data.items : []);
-      setCurrentPath(data?.path || path);
+      const list = Array.isArray(data?.entries) ? data.entries : (Array.isArray((data as any)?.items) ? (data as any).items : []);
+      setItems(list);
+      setCurrentPath(data?.current_dir ?? (data as any)?.path ?? path);
     } catch (err: any) {
       addToast(err.message || 'Failed to browse directory', 'error');
     } finally {

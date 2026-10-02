@@ -8,11 +8,27 @@ export const RepairPage: React.FC = () => {
   const [reacquiring, setReacquiring] = useState(false);
   const [report, setReport] = useState<any[] | null>(null);
 
+  const loadHealth = async () => {
+    try {
+      const res = await api.getRepairHealth();
+      if (Array.isArray(res)) {
+        setReport(res);
+      }
+    } catch {
+      // ignore on initial load
+    }
+  };
+
+  React.useEffect(() => {
+    loadHealth();
+  }, []);
+
   const handleRunCheck = async () => {
     setChecking(true);
     try {
-      const res = await api.checkRepair();
-      setReport(Array.isArray(res) ? res : res?.items || []);
+      await api.runRepair({ force: true });
+      const res = await api.getRepairHealth();
+      setReport(Array.isArray(res) ? res : (res as any)?.items || []);
       addToast('Health check complete', 'success');
     } catch (err: any) {
       addToast(err.message || 'Health check failed', 'error');
@@ -21,13 +37,19 @@ export const RepairPage: React.FC = () => {
     }
   };
 
-  const handleReacquire = async (hash?: string) => {
+  const handleReacquire = async (entryOrHash?: string) => {
     setReacquiring(true);
     try {
-      await api.reacquire(hash);
-      addToast(hash ? `Reacquire triggered for ${hash}` : 'Reacquire triggered for all issues', 'success');
+      if (entryOrHash) {
+        await api.fixBroken([entryOrHash]);
+        addToast(`Repair fix triggered for ${entryOrHash}`, 'success');
+      } else {
+        await api.fixBroken([]);
+        addToast('Repair fix triggered for all broken entries', 'success');
+      }
+      await loadHealth();
     } catch (err: any) {
-      addToast(err.message || 'Reacquire failed', 'error');
+      addToast(err.message || 'Action failed', 'error');
     } finally {
       setReacquiring(false);
     }
@@ -111,27 +133,30 @@ export const RepairPage: React.FC = () => {
                     <td>
                       <span
                         className={`badge badge-sm uppercase ${
-                          item.status === 'ok'
+                          item.status === 'ok' || item.status === 'healthy'
                             ? 'badge-success'
-                            : item.status === 'corrupt'
+                            : item.status === 'corrupt' || item.status === 'broken'
                             ? 'badge-error'
+                            : item.status === 'repairing'
+                            ? 'badge-info'
                             : 'badge-warning'
                         }`}
                       >
                         {item.status || 'Issue'}
                       </span>
                     </td>
-                    <td className="font-mono text-xs max-w-md truncate" title={item.path}>
-                      {item.path}
+                    <td className="font-mono text-xs max-w-md truncate" title={item.entry_name || item.path}>
+                      {item.entry_name || item.path}
                     </td>
-                    <td className="text-xs opacity-70">{item.message || '-'}</td>
+                    <td className="text-xs opacity-70">{item.failure_reason || item.message || '-'}</td>
                     <td className="text-right">
-                      {item.torrent_hash && (
+                      {(item.entry_name || item.torrent_hash) && (
                         <button
                           className="btn btn-xs btn-outline btn-warning"
-                          onClick={() => handleReacquire(item.torrent_hash)}
+                          onClick={() => handleReacquire(item.entry_name || item.torrent_hash)}
+                          disabled={reacquiring}
                         >
-                          Reacquire
+                          Fix / Reacquire
                         </button>
                       )}
                     </td>

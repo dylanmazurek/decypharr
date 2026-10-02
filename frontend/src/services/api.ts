@@ -1,13 +1,13 @@
-import { DecypharrMeta, TorrentItem, TorrentFile, BrowseItem, StatsData, DecypharrConfig } from '../types';
+import { DecypharrMeta, TorrentItem, TorrentFile, BrowseResponse, EntryHealth, StatsData, DecypharrConfig } from '../types';
 
 export function getMeta(): DecypharrMeta {
   const injected = window.__DECYPHARR__ || {};
   return {
     urlBase: (injected.urlBase || '').replace(/\/$/, ''),
     version: injected.version || 'v1.1.5',
-    setupRequired: !!injected.setupRequired,
+    setupRequired: Boolean(injected.setupRequired || injected.setupError),
     setupError: injected.setupError || '',
-    authEnabled: injected.authEnabled ?? true,
+    authEnabled: injected.authEnabled ?? injected.needsAuth ?? true,
     user: injected.user || '',
   };
 }
@@ -137,27 +137,55 @@ export const api = {
   },
 
   // File browser
-  browse: async (path = ''): Promise<{ path: string; items: BrowseItem[] }> => {
-    const qs = path ? `?path=${encodeURIComponent(path)}` : '';
-    return request<{ path: string; items: BrowseItem[] }>(`/api/browse${qs}`);
+  browse: async (path = ''): Promise<BrowseResponse> => {
+    const cleanPath = path ? (path.startsWith('/') ? path : `/${path}`) : '';
+    return request<BrowseResponse>(`/api/browse${cleanPath}`);
   },
 
   // Repair & Health check
-  checkRepair: async (): Promise<any> => {
-    return request<any>('/api/repair/check');
+  runRepair: async (options: { force?: boolean } = {}): Promise<any> => {
+    return request<any>('/api/repair/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+  },
+
+  getRepairStatus: async (): Promise<any> => {
+    return request<any>('/api/repair/status');
+  },
+
+  getRepairHealth: async (): Promise<EntryHealth[]> => {
+    return request<EntryHealth[]>('/api/repair/health');
+  },
+
+  getRepairRuns: async (): Promise<any> => {
+    return request<any>('/api/repair/runs');
+  },
+
+  fixBroken: async (names: string[] = []): Promise<any> => {
+    return request<any>('/api/repair/fix', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ names }),
+    });
+  },
+
+  checkRepair: async (): Promise<EntryHealth[]> => {
+    return request<EntryHealth[]>('/api/repair/health');
   },
 
   reacquire: async (hash?: string): Promise<any> => {
-    return request<any>('/api/repair/reacquire', {
+    return request<any>('/api/arr/reacquire', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hash }),
+      body: JSON.stringify({ entry_id: hash, hash }),
     });
   },
 
   // Stats
   getStats: async (): Promise<StatsData> => {
-    return request<StatsData>('/api/stats');
+    return request<StatsData>('/debug/stats');
   },
 
   // Config
