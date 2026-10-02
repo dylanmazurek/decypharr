@@ -89,8 +89,9 @@ type Queue struct {
 
 func newQueue(storage *storage.Storage, removeStalledAfterStr string) *Queue {
 	q := &Queue{
-		storage: storage,
-		logger:  logger.New("queue"),
+		storage:            storage,
+		logger:             logger.New("queue"),
+		removeStalledAfter: time.Hour,
 	}
 
 	if removeStalledAfterStr != "" {
@@ -146,6 +147,9 @@ func (q *Queue) DeleteWhere(category string, protocol config.Protocol, state sto
 }
 
 func (q *Queue) DeleteStalled() error {
+	if q.removeStalledAfter <= 0 {
+		return nil
+	}
 	cutoff := time.Now().Add(-q.removeStalledAfter)
 	return q.storage.DeleteWhereQueued(func(t *storage.Entry) bool {
 		if !t.AddedOn.Before(cutoff) {
@@ -154,8 +158,8 @@ func (q *Queue) DeleteStalled() error {
 		if t.Status == debridTypes.TorrentStatusQueued {
 			return false
 		}
-		// Torrent entries: not downloading, no seeders, no progress
-		if t.Status != debridTypes.TorrentStatusDownloading && t.Seeders == 0 && t.Progress == 0 {
+		// Torrent entries: stalled with 0 progress and (0 speed or 0 seeders)
+		if t.IsTorrent() && t.Progress == 0 && (t.Speed == 0 || t.Seeders == 0) {
 			return true
 		}
 		// NZB entries stuck in error state with no progress

@@ -56,7 +56,7 @@ type QueueSchema struct {
 // status message titles and messages.
 var catalogMatchers = map[string]func(item QueueSchema, text string) bool{
 	"failed_download": func(item QueueSchema, _ string) bool {
-		return strings.EqualFold(item.Status, "failed")
+		return strings.EqualFold(item.Status, "failed") || strings.EqualFold(item.TrackedDownloadStatus, "error")
 	},
 	"title_mismatch": func(_ QueueSchema, text string) bool {
 		return strings.Contains(text, "title mismatch")
@@ -211,6 +211,45 @@ func (s *Service) removeQueueItems(ctx context.Context, name string, ids []int, 
 	}
 	if err := expectSuccess(resp); err != nil {
 		return fmt.Errorf("remove queue items: %w", err)
+	}
+	return nil
+}
+
+// BlocklistAndRedownload searches the Arr queue for the item matching downloadID (infohash)
+// and instructs the Arr to remove the item, blocklist the stalled release, and search for an alternative (skipRedownload=false).
+func (s *Service) BlocklistAndRedownload(ctx context.Context, arrName string, downloadID string) error {
+	if s == nil || downloadID == "" {
+		return nil
+	}
+	var arrNames []string
+	if arrName != "" {
+		arrNames = []string{arrName}
+	} else {
+		for _, inst := range s.All() {
+			arrNames = append(arrNames, inst.Name)
+		}
+	}
+
+	for _, name := range arrNames {
+		items, err := s.Queue(ctx, name)
+		if err != nil {
+			continue
+		}
+		var targetIDs []int
+		for _, item := range items {
+			if strings.EqualFold(item.DownloadId, downloadID) {
+				targetIDs = append(targetIDs, item.Id)
+			}
+		}
+		if len(targetIDs) > 0 {
+			s.logger.Info().Str("arr", name).Str("downloadId", downloadID).Ints("ids", targetIDs).
+				Msg("Instructing Arr to blocklist stalled release and search for an alternative")
+			if err := s.removeQueueItems(ctx, name, targetIDs, false); err != nil {
+				s.logger.Error().Err(err).Str("arr", name).Msg("Failed to remove and research stalled item in Arr")
+				return err
+			}
+			return nil
+		}
 	}
 	return nil
 }

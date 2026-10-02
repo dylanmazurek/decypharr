@@ -512,3 +512,60 @@ func (m *Manager) SendToDebrid(ctx context.Context, importRequest *ImportRequest
 	joinedErrors := errors.Join(errs...)
 	return nil, fmt.Errorf("failed to process torrent: %w", joinedErrors)
 }
+
+// processStalledTorrents inspects the queue for torrents that have been downloading with 0 progress
+// and 0 speed/seeders for longer than removeStalledAfter. When stalled, it instructs the Arr to blocklist
+// the bad release and search for an alternative, deletes it from the provider, and removes it from the queue.
+func (m *Manager) processStalledTorrents(ctx context.Context) {
+	stalledTimeout := m.queue.removeStalledAfter
+	if stalledTimeout <= 0 {
+		stalledTimeout = time.Hour
+	}
+	cutoff := time.Now().Add(-stalledTimeout)
+
+	entries := m.queue.ListFilter("", config.ProtocolAll, storage.EntryStateDownloading, nil, "", false)
+	for _, entry := range entries {
+		if !entry.AddedOn.Before(cutoff) {
+			continue
+		}
+		if entry.Status == debridTypes.TorrentStatusQueued {
+			continue
+		}
+
+		isStalled := false
+		if entry.IsTorrent() && entry.Progress == 0 && (entry.Speed == 0 || entry.Seeders == 0) {
+			isStalled = true
+		} else if entry.IsNZB() && entry.State == storage.EntryStateError && entry.Progress == 0 {
+			isStalled = true
+		}
+
+		if !isStalled {
+			continue
+		}
+
+		m.logger.Warn().
+			Str("name", entry.Name).
+			Str("hash", entry.InfoHash).
+			Str("category", entry.Category).
+			Dur("stalled_duration", time.Since(entry.AddedOn)).
+			Msg("Torrent stalled with no progress or seeders: removing, blocklisting, and requesting Arr to research alternative")
+
+		// 1. Tell Arr to remove from client, blocklist, and search for a replacement (skipRedownload=false)
+		if m.arr != nil {
+			_ = m.arr.BlocklistAndRedownload(ctx, entry.Category, entry.InfoHash)
+		}
+
+		// 2. Delete on debrid provider (TorBox, etc.)
+		if placement := entry.GetActiveProvider(); placement != nil && placement.ID != "" {
+			if client := m.ProviderClient(placement.Provider); client != nil {
+				go func(pClient common.Client, id string) {
+					_ = pClient.DeleteTorrent(id)
+				}(client, placement.ID)
+			}
+		}
+
+		// 3. Delete from Decypharr queue storage and disk files
+		_ = m.queue.Delete(entry.InfoHash, true, nil)
+	}
+}
+

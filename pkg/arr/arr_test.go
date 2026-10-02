@@ -1,6 +1,11 @@
 package arr
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/dylanmazurek/decypharr/internal/config"
@@ -87,3 +92,72 @@ func TestArrInstanceFingerprintCanonicalizesHost(t *testing.T) {
 		t.Fatal("different Arr instances produced the same fingerprint")
 	}
 }
+
+func TestBlocklistAndRedownload(t *testing.T) {
+	var queueCalled, deleteCalled bool
+	var querySent string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "api/v3/queue"):
+			queueCalled = true
+			resp := QueueResponseScheme{
+				TotalRecords: 1,
+				Records: []QueueSchema{
+					{
+						Id:         42,
+						DownloadId: "AABBCCDD11223344",
+						Status:     "downloading",
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+		case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "api/v3/queue/bulk"):
+			deleteCalled = true
+			querySent = r.URL.RawQuery
+			var payload struct {
+				Ids []int `json:"ids"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode payload: %v", err)
+			}
+			if len(payload.Ids) != 1 || payload.Ids[0] != 42 {
+				t.Fatalf("unexpected ids: %v", payload.Ids)
+			}
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	arrs := New()
+	arrs.AddOrUpdate(Arr{
+		Name:   "sonarr",
+		Host:   server.URL,
+		Token:  "test-token",
+		Source: SourceManual,
+	})
+
+	err := arrs.BlocklistAndRedownload(context.Background(), "sonarr", "aabbccdd11223344")
+	if err != nil {
+		t.Fatalf("BlocklistAndRedownload failed: %v", err)
+	}
+	if !queueCalled {
+		t.Fatal("expected queue to be called")
+	}
+	if !deleteCalled {
+		t.Fatal("expected delete bulk to be called")
+	}
+	if !strings.Contains(querySent, "skipRedownload=false") {
+		t.Fatalf("expected skipRedownload=false, got %s", querySent)
+	}
+	if !strings.Contains(querySent, "blocklist=true") {
+		t.Fatalf("expected blocklist=true, got %s", querySent)
+	}
+	if !strings.Contains(querySent, "removeFromClient=true") {
+		t.Fatalf("expected removeFromClient=true, got %s", querySent)
+	}
+}
+
