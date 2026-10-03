@@ -41,6 +41,7 @@ type QueueSchema struct {
 		Title    string   `json:"title"`
 		Messages []string `json:"messages"`
 	} `json:"statusMessages"`
+	ErrorMessage                        string `json:"errorMessage"`
 	DownloadId                          string `json:"downloadId"`
 	Protocol                            string `json:"protocol"`
 	DownloadClient                      string `json:"downloadClient"`
@@ -55,8 +56,11 @@ type QueueSchema struct {
 // config.QueueCleanupRule.ID. text is the lowercased join of a queue item's
 // status message titles and messages.
 var catalogMatchers = map[string]func(item QueueSchema, text string) bool{
-	"failed_download": func(item QueueSchema, _ string) bool {
-		return strings.EqualFold(item.Status, "failed") || strings.EqualFold(item.TrackedDownloadStatus, "error")
+	"failed_download": func(item QueueSchema, text string) bool {
+		return strings.EqualFold(item.Status, "failed") ||
+			strings.EqualFold(item.TrackedDownloadStatus, "error") ||
+			strings.Contains(text, "reporting an error") ||
+			strings.Contains(text, "failed download")
 	},
 	"title_mismatch": func(_ QueueSchema, text string) bool {
 		return strings.Contains(text, "title mismatch")
@@ -152,12 +156,22 @@ func (s *Service) CleanupQueue(ctx context.Context, name string) error {
 // and those flagged warning or error are considered, and the first matching
 // rule wins.
 func resolveQueueAction(item QueueSchema, rules []config.QueueCleanupRule) QueueAction {
-	status := strings.ToLower(item.TrackedDownloadStatus)
-	if !strings.EqualFold(item.Status, "failed") && status != "warning" && status != "error" {
+	trackedStatus := strings.ToLower(item.TrackedDownloadStatus)
+	itemStatus := strings.ToLower(item.Status)
+	hasError := strings.EqualFold(item.Status, "failed") ||
+		trackedStatus == "error" ||
+		trackedStatus == "warning" ||
+		itemStatus == "warning" ||
+		item.ErrorMessage != ""
+	if !hasError {
 		return QueueActionNone
 	}
 
 	var builder strings.Builder
+	if item.ErrorMessage != "" {
+		builder.WriteString(item.ErrorMessage)
+		builder.WriteByte(' ')
+	}
 	for _, message := range item.StatusMessages {
 		builder.WriteString(message.Title)
 		builder.WriteByte(' ')
