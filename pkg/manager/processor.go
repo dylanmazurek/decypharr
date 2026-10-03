@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dylanmazurek/decypharr/internal/config"
@@ -234,6 +235,9 @@ func (m *Manager) processQueuedNZB(entry *storage.Entry) {
 
 func (m *Manager) processQueuedTorrent(entry *storage.Entry) {
 	defer m.processingEntries.Delete(entry.InfoHash)
+	if _, err := m.queue.GetTorrent(entry.InfoHash); err != nil {
+		return
+	}
 	placement := entry.GetActiveProvider()
 	if placement == nil {
 		m.logger.Error().Str("name", entry.Name).Msg("No active placement found for queued entry")
@@ -271,6 +275,10 @@ func (m *Manager) processQueuedTorrent(entry *storage.Entry) {
 	dbT, err := client.CheckStatus(debridTorrent)
 	if err != nil {
 		m.logger.Error().Err(err).Str("name", entry.Name).Msg("Error checking status")
+		if strings.Contains(err.Error(), "404") || strings.Contains(strings.ToLower(err.Error()), "not found") {
+			_ = m.queue.Delete(entry.InfoHash, true, nil)
+			return
+		}
 		entry.MarkAsError(err)
 		_ = m.queue.Update(entry)
 
@@ -523,7 +531,7 @@ func (m *Manager) processStalledTorrents(ctx context.Context) {
 	}
 	cutoff := time.Now().Add(-stalledTimeout)
 
-	entries := m.queue.ListFilter("", config.ProtocolAll, storage.EntryStateDownloading, nil, "", false)
+	entries := m.queue.ListFilter("", config.ProtocolAll, "", nil, "", false)
 	for _, entry := range entries {
 		if !entry.AddedOn.Before(cutoff) {
 			continue
@@ -533,8 +541,12 @@ func (m *Manager) processStalledTorrents(ctx context.Context) {
 		}
 
 		isStalled := false
-		if entry.IsTorrent() && entry.Progress == 0 && (entry.Speed == 0 || entry.Seeders == 0) {
-			isStalled = true
+		if entry.IsTorrent() {
+			if entry.State == storage.EntryStateError && entry.Progress == 0 {
+				isStalled = true
+			} else if entry.State == storage.EntryStateDownloading && entry.Progress == 0 && (entry.Speed == 0 || entry.Seeders == 0) {
+				isStalled = true
+			}
 		} else if entry.IsNZB() && entry.State == storage.EntryStateError && entry.Progress == 0 {
 			isStalled = true
 		}
