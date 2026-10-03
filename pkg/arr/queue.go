@@ -60,7 +60,8 @@ var catalogMatchers = map[string]func(item QueueSchema, text string) bool{
 		return strings.EqualFold(item.Status, "failed") ||
 			strings.EqualFold(item.TrackedDownloadStatus, "error") ||
 			strings.Contains(text, "reporting an error") ||
-			strings.Contains(text, "failed download")
+			strings.Contains(text, "failed download") ||
+			strings.Contains(text, "stalled with no connections")
 	},
 	"title_mismatch": func(_ QueueSchema, text string) bool {
 		return strings.Contains(text, "title mismatch")

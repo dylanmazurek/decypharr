@@ -980,14 +980,14 @@ func isRetryableDownloadError(err error) bool {
 		return false
 	}
 	if status, ok := errors.AsType[grab.StatusCodeError](err); ok {
-		switch int(status) {
+		code := int(status)
+		if code >= 500 && code <= 599 {
+			return true
+		}
+		switch code {
 		case http.StatusRequestTimeout,
 			http.StatusTooEarly,
-			http.StatusTooManyRequests,
-			http.StatusInternalServerError,
-			http.StatusBadGateway,
-			http.StatusServiceUnavailable,
-			http.StatusGatewayTimeout:
+			http.StatusTooManyRequests:
 			return true
 		default:
 			return false

@@ -188,3 +188,78 @@ func b64(s string) string {
 	}
 	return sb.String()
 }
+
+func TestHashesContext(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		target     string
+		body       string
+		formHeader bool
+		want       []string
+	}{
+		{
+			name:   "query pipe separated",
+			method: http.MethodGet,
+			target: "/torrents/info?hashes=hash1|hash2|hash3",
+			want:   []string{"hash1", "hash2", "hash3"},
+		},
+		{
+			name:       "form body pipe separated",
+			method:     http.MethodPost,
+			target:     "/torrents/delete",
+			body:       "hashes=hashA|hashB&deleteFiles=true",
+			formHeader: true,
+			want:       []string{"hashA", "hashB"},
+		},
+		{
+			name:       "form body multiple entries",
+			method:     http.MethodPost,
+			target:     "/torrents/delete",
+			body:       "hashes=hashX&hashes=hashY",
+			formHeader: true,
+			want:       []string{"hashX", "hashY"},
+		},
+		{
+			name:       "deduplicates and trims whitespace",
+			method:     http.MethodPost,
+			target:     "/torrents/delete?hashes=hash1",
+			body:       "hashes= hash1 | hash2 ",
+			formHeader: true,
+			want:       []string{"hash1", "hash2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var bodyReader *strings.Reader
+			if tt.body != "" {
+				bodyReader = strings.NewReader(tt.body)
+			} else {
+				bodyReader = strings.NewReader("")
+			}
+			req := httptest.NewRequest(tt.method, tt.target, bodyReader)
+			if tt.formHeader {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+
+			var captured []string
+			handler := hashesContext(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				captured = getHashes(r.Context())
+			}))
+
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+
+			if len(captured) != len(tt.want) {
+				t.Fatalf("got %d hashes %v, want %d hashes %v", len(captured), captured, len(tt.want), tt.want)
+			}
+			for i := range captured {
+				if captured[i] != tt.want[i] {
+					t.Errorf("at index %d: got %q, want %q", i, captured[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
