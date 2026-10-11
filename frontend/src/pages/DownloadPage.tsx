@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useRouter } from '../context/RouterContext';
+import { PageHeader } from '../components/ui/PageHeader';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { UploadCloud, Link as LinkIcon, FileUp } from 'lucide-react';
 
 export const DownloadPage: React.FC = () => {
   const { addToast } = useToast();
@@ -56,53 +60,62 @@ export const DownloadPage: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <i className="bi bi-cloud-download text-2xl text-primary"></i>
-        <div>
-          <h2 className="text-xl font-bold">Add Torrents</h2>
-          <p className="text-xs text-base-content/60">
-            Download files via Magnet links, HTTP URLs, or .torrent files
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Add Torrents"
+        subtitle="Queue downloads via Magnet links, HTTP URLs, or .torrent files"
+      />
 
-      <div className="bg-base-100 rounded-xl border border-base-300 p-6 shadow-xs">
+      <Card className="p-6">
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Magnet Links or URLs</span>
-              <span className="label-text-alt text-base-content/50">One per line</span>
-            </label>
+          {/* Magnet / URLs */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <LinkIcon className="w-3.5 h-3.5" />
+                Magnet Links or URLs
+              </label>
+              <span className="text-[11px] font-mono text-muted-foreground">One per line</span>
+            </div>
             <textarea
-              className="textarea textarea-bordered h-28 font-mono text-xs"
+              className="w-full h-28 p-3 text-xs font-mono rounded-lg bg-elevated border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
               placeholder="magnet:?xt=urn:btih:..."
               value={urls}
               onChange={(e) => setUrls(e.target.value)}
-            ></textarea>
+            />
           </div>
 
-          <div className="divider text-xs text-base-content/50 uppercase">OR</div>
+          <div className="relative flex items-center justify-center my-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <span className="relative px-3 text-[11px] font-semibold uppercase tracking-wider bg-card text-muted-foreground">
+              OR
+            </span>
+          </div>
 
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Upload .torrent File</span>
+          {/* File Upload */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <FileUp className="w-3.5 h-3.5" />
+              Upload .torrent File
             </label>
             <input
               type="file"
               accept=".torrent"
-              className="file-input file-input-bordered file-input-primary w-full"
+              className="w-full text-xs text-muted-foreground file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-border file:text-xs file:font-medium file:bg-elevated file:text-foreground hover:file:bg-raised file:cursor-pointer p-1.5 rounded-lg bg-elevated/40 border border-border"
               onChange={(e) => setFile(e.target.files?.[0] || null)}
             />
           </div>
 
+          {/* Category & Save Path */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text font-medium">Category</span>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Category
               </label>
               {Object.keys(categories).length > 0 ? (
                 <select
-                  className="select select-bordered w-full"
+                  className="w-full h-9 px-3 text-xs rounded-lg bg-elevated border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                 >
@@ -117,58 +130,68 @@ export const DownloadPage: React.FC = () => {
                 <input
                   type="text"
                   placeholder="e.g. movies, tv"
-                  className="input input-bordered w-full"
+                  className="w-full h-9 px-3 text-xs rounded-lg bg-elevated border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                 />
               )}
             </div>
 
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text font-medium">Custom Save Path</span>
-                <span className="label-text-alt text-base-content/50">Optional</span>
-              </label>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Custom Save Path
+                </label>
+                <span className="text-[11px] text-muted-foreground">Optional</span>
+              </div>
               <input
                 type="text"
                 placeholder="/downloads/custom"
-                className="input input-bordered w-full"
+                className="w-full h-9 px-3 text-xs font-mono rounded-lg bg-elevated border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
                 value={savePath}
                 onChange={(e) => setSavePath(e.target.value)}
               />
             </div>
           </div>
 
-          <div className="form-control">
-            <label className="label cursor-pointer justify-start gap-3">
+          {/* Options */}
+          <div className="pt-1">
+            <label className="flex items-center gap-3 p-3 rounded-lg bg-elevated/60 border border-border cursor-pointer select-none">
               <input
                 type="checkbox"
-                className="checkbox checkbox-sm checkbox-primary"
+                className="rounded border-border accent-primary cursor-pointer"
                 checked={paused}
                 onChange={(e) => setPaused(e.target.checked)}
               />
-              <span className="label-text">Add torrent in paused state</span>
+              <span className="text-xs text-foreground font-medium">
+                Add torrent in paused state
+              </span>
             </label>
           </div>
 
-          <div className="flex justify-end gap-3 pt-3">
-            <button
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+            <Button
               type="button"
-              className="btn btn-ghost"
+              variant="ghost"
+              size="sm"
               onClick={() => navigate('/')}
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="btn btn-primary min-w-[120px]"
+              variant="primary"
+              size="sm"
               disabled={loading}
+              className="min-w-[120px]"
             >
-              {loading ? <span className="loading loading-spinner loading-sm"></span> : 'Add Torrent'}
-            </button>
+              <UploadCloud className="w-4 h-4" />
+              {loading ? 'Adding...' : 'Add Torrent'}
+            </Button>
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 };

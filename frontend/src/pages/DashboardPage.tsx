@@ -2,6 +2,25 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '../services/api';
 import { TorrentItem, TorrentFile } from '../types';
 import { useToast } from '../context/ToastContext';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StatusStrip, StatCell } from '../components/ui/StatusStrip';
+import { Segmented } from '../components/ui/Segmented';
+import { Button } from '../components/ui/Button';
+import {
+  ArrowDown,
+  ArrowUp,
+  Play,
+  Pause,
+  Trash2,
+  RotateCw,
+  Search,
+  HardDrive,
+  FolderOpen,
+  X,
+  AlertTriangle,
+  FileText,
+} from 'lucide-react';
+import { cn } from '../lib/utils';
 
 export const DashboardPage: React.FC = () => {
   const { addToast } = useToast();
@@ -23,7 +42,6 @@ export const DashboardPage: React.FC = () => {
       const data = await api.getTorrents(filter, category);
       setTorrents(Array.isArray(data) ? data : []);
     } catch (err: any) {
-      // Don't show toast on routine polling errors
       console.error('Failed to fetch torrents:', err);
     } finally {
       setLoading(false);
@@ -145,52 +163,114 @@ export const DashboardPage: React.FC = () => {
   const stats = useMemo(() => {
     let dlTotal = 0;
     let upTotal = 0;
+    let downloadingCount = 0;
+    let completedCount = 0;
+    let pausedCount = 0;
+
     torrents.forEach((t) => {
       dlTotal += t.dlspeed || 0;
       upTotal += t.upspeed || 0;
+      const state = (t.state || '').toLowerCase();
+      if (state.includes('download')) downloadingCount++;
+      else if (state.includes('complete') || state.includes('upload') || state.includes('seed'))
+        completedCount++;
+      else if (state.includes('pause')) pausedCount++;
     });
+
     return {
       total: torrents.length,
       dlTotal,
       upTotal,
+      downloadingCount,
+      completedCount,
+      pausedCount,
     };
   }, [torrents]);
 
-  return (
-    <div className="space-y-4">
-      {/* Top action toolbar & status summary */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-base-100 p-4 rounded-xl border border-base-300">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="join join-horizontal">
-            <button
-              className={`join-item btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setFilter('all')}
-            >
-              All ({torrents.length})
-            </button>
-            <button
-              className={`join-item btn btn-sm ${filter === 'downloading' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setFilter('downloading')}
-            >
-              Downloading
-            </button>
-            <button
-              className={`join-item btn btn-sm ${filter === 'completed' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setFilter('completed')}
-            >
-              Completed
-            </button>
-            <button
-              className={`join-item btn btn-sm ${filter === 'paused' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setFilter('paused')}
-            >
-              Paused
-            </button>
-          </div>
+  const filterOptions = [
+    { value: 'all', label: 'All', count: stats.total },
+    { value: 'downloading', label: 'Downloading', count: stats.downloadingCount },
+    { value: 'completed', label: 'Completed', count: stats.completedCount },
+    { value: 'paused', label: 'Paused', count: stats.pausedCount },
+  ];
 
+  return (
+    <div className="space-y-6">
+      {/* Page Header */}
+      <PageHeader
+        title="Torrents"
+        subtitle="Active media transfers and download queues"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchTorrents}
+              title="Refresh"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+              Refresh
+            </Button>
+          </div>
+        }
+      />
+
+      {/* Signature Status Strip */}
+      <StatusStrip columns={4}>
+        <StatCell
+          label="Total Transfers"
+          value={<span className="font-mono">{stats.total}</span>}
+          subtext="Active in client"
+          icon={<HardDrive className="w-4 h-4" />}
+          statusDot="ok"
+        />
+        <StatCell
+          label="Download Speed"
+          value={
+            <span className="font-mono text-primary flex items-center gap-1.5">
+              <ArrowDown className="w-4 h-4 shrink-0 text-primary" />
+              {formatSpeed(stats.dlTotal)}
+            </span>
+          }
+          subtext="Aggregate inbound"
+        />
+        <StatCell
+          label="Upload Speed"
+          value={
+            <span className="font-mono text-accent-foreground flex items-center gap-1.5">
+              <ArrowUp className="w-4 h-4 shrink-0 text-accent-foreground" />
+              {formatSpeed(stats.upTotal)}
+            </span>
+          }
+          subtext="Aggregate outbound"
+        />
+        <StatCell
+          label="Active Queues"
+          value={
+            <span className="font-mono">
+              {stats.downloadingCount} <span className="text-sm font-normal text-muted-foreground">DL</span> /{' '}
+              {stats.completedCount} <span className="text-sm font-normal text-muted-foreground">Done</span>
+            </span>
+          }
+          subtext={stats.pausedCount > 0 ? `${stats.pausedCount} paused` : 'Running smoothly'}
+        />
+      </StatusStrip>
+
+      {/* Filter and Action Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-card-lift">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Segmented Filter */}
+          <Segmented
+            options={filterOptions}
+            value={filter}
+            onChange={(val) => setFilter(val)}
+            size="sm"
+          />
+
+          {/* Categories Selector */}
           {Object.keys(categories).length > 0 && (
             <select
-              className="select select-sm select-bordered"
+              className="h-8 px-2.5 text-xs rounded-lg bg-elevated border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             >
@@ -204,300 +284,342 @@ export const DashboardPage: React.FC = () => {
           )}
         </div>
 
-        {/* Global Transfer Speed */}
-        <div className="flex items-center gap-4 text-sm font-medium">
-          <div className="flex items-center gap-1 text-primary">
-            <i className="bi bi-arrow-down"></i>
-            <span>{formatSpeed(stats.dlTotal)}</span>
-          </div>
-          <div className="flex items-center gap-1 text-secondary">
-            <i className="bi bi-arrow-up"></i>
-            <span>{formatSpeed(stats.upTotal)}</span>
-          </div>
-        </div>
-      </div>
+        {/* Batch Actions & Search */}
+        <div className="flex items-center gap-2 justify-between lg:justify-end">
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={selectedHashes.size === 0}
+              onClick={handleResume}
+              title="Resume selected"
+            >
+              <Play className="w-3.5 h-3.5 text-success" />
+              <span className="hidden sm:inline">Resume</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={selectedHashes.size === 0}
+              onClick={handlePause}
+              title="Pause selected"
+            >
+              <Pause className="w-3.5 h-3.5 text-warning" />
+              <span className="hidden sm:inline">Pause</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={selectedHashes.size === 0}
+              onClick={handleRecheck}
+              title="Force recheck"
+            >
+              <RotateCw className="w-3.5 h-3.5 text-muted-foreground" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={selectedHashes.size === 0}
+              onClick={() => setShowDeleteModal(true)}
+              title="Delete selected"
+              className={selectedHashes.size > 0 ? 'text-destructive-text hover:bg-destructive/10' : ''}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
 
-      {/* Batch action bar & Search */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-base-100 p-3 rounded-xl border border-base-300">
-        <div className="flex items-center gap-2">
-          <button
-            className="btn btn-sm btn-outline btn-success"
-            disabled={selectedHashes.size === 0}
-            onClick={handleResume}
-            title="Resume"
-          >
-            <i className="bi bi-play-fill text-lg"></i>
-          </button>
-          <button
-            className="btn btn-sm btn-outline btn-warning"
-            disabled={selectedHashes.size === 0}
-            onClick={handlePause}
-            title="Pause"
-          >
-            <i className="bi bi-pause-fill text-lg"></i>
-          </button>
-          <button
-            className="btn btn-sm btn-outline btn-error"
-            disabled={selectedHashes.size === 0}
-            onClick={() => setShowDeleteModal(true)}
-            title="Delete"
-          >
-            <i className="bi bi-trash-fill"></i>
-          </button>
-          <button
-            className="btn btn-sm btn-outline"
-            disabled={selectedHashes.size === 0}
-            onClick={handleRecheck}
-            title="Force Recheck"
-          >
-            <i className="bi bi-arrow-repeat"></i>
-          </button>
-          {selectedHashes.size > 0 && (
-            <span className="text-xs text-base-content/70 ml-2">
-              {selectedHashes.size} selected
-            </span>
-          )}
-        </div>
+            {selectedHashes.size > 0 && (
+              <span className="text-xs text-muted-foreground font-mono ml-1">
+                ({selectedHashes.size})
+              </span>
+            )}
+          </div>
 
-        <div className="relative">
-          <i className="bi bi-search absolute left-3 top-2.5 text-base-content/50"></i>
-          <input
-            type="text"
-            placeholder="Search torrents..."
-            className="input input-sm input-bordered pl-9 w-full sm:w-64"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          {/* Search Input */}
+          <div className="relative w-44 sm:w-60">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Filter names..."
+              className="w-full h-8 pl-8 pr-3 text-xs rounded-lg bg-elevated border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
       {/* Torrents Table */}
-      <div className="bg-base-100 rounded-xl border border-base-300 overflow-x-auto">
-        <table className="table table-sm w-full">
-          <thead>
-            <tr className="border-b border-base-300 bg-base-200/50">
-              <th className="w-10">
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-xs"
-                  checked={
-                    filteredTorrents.length > 0 &&
-                    selectedHashes.size === filteredTorrents.length
-                  }
-                  onChange={handleSelectAll}
-                />
-              </th>
-              <th>Name</th>
-              <th className="w-24">Size</th>
-              <th className="w-36">Progress</th>
-              <th className="w-24">Status</th>
-              <th className="w-24">DL Speed</th>
-              <th className="w-20">ETA</th>
-              <th className="w-16">Seeds</th>
-              <th className="w-16">Peers</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={9} className="text-center py-12">
-                  <span className="loading loading-spinner loading-md"></span>
-                </td>
+      <div className="rounded-xl border border-border bg-card shadow-card-lift overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead>
+              <tr className="bg-elevated/70 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground select-none">
+                <th className="py-2.5 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    className="rounded border-border accent-primary cursor-pointer"
+                    checked={
+                      filteredTorrents.length > 0 &&
+                      selectedHashes.size === filteredTorrents.length
+                    }
+                    onChange={handleSelectAll}
+                  />
+                </th>
+                <th className="py-2.5 px-3 font-semibold">Name</th>
+                <th className="py-2.5 px-3 w-24 font-semibold">Size</th>
+                <th className="py-2.5 px-3 w-36 font-semibold">Progress</th>
+                <th className="py-2.5 px-3 w-28 font-semibold">Status</th>
+                <th className="py-2.5 px-3 w-24 font-semibold">DL Speed</th>
+                <th className="py-2.5 px-3 w-20 font-semibold">ETA</th>
+                <th className="py-2.5 px-3 w-16 font-semibold">Seeds</th>
+                <th className="py-2.5 px-3 w-16 font-semibold">Peers</th>
               </tr>
-            ) : filteredTorrents.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="text-center py-12 text-base-content/60">
-                  <i className="bi bi-inbox text-4xl block mb-2 opacity-40"></i>
-                  No torrents found
-                </td>
-              </tr>
-            ) : (
-              filteredTorrents.map((t) => {
-                const isSelected = selectedHashes.has(t.hash);
-                const progressPct = Math.round((t.progress || 0) * 100);
-                return (
-                  <tr
-                    key={t.hash}
-                    className={`hover:bg-base-200/40 cursor-pointer ${isSelected ? 'bg-primary/5' : ''}`}
-                    onClick={() => viewDetails(t)}
-                  >
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        className="checkbox checkbox-xs"
-                        checked={isSelected}
-                        onChange={() => toggleSelect(t.hash)}
-                      />
-                    </td>
-                    <td className="font-medium max-w-xs truncate" title={t.name}>
-                      {t.name}
-                      {t.category && (
-                        <span className="badge badge-xs badge-neutral ml-2">
-                          {t.category}
-                        </span>
+            </thead>
+            <tbody className="divide-y divide-border font-sans">
+              {loading ? (
+                <tr>
+                  <td colSpan={9} className="text-center py-16 text-muted-foreground">
+                    <div className="inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    <p className="mt-2 text-xs">Loading torrents...</p>
+                  </td>
+                </tr>
+              ) : filteredTorrents.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="text-center py-16 text-muted-foreground">
+                    <FolderOpen className="w-8 h-8 mx-auto opacity-30 mb-2" />
+                    <p className="text-sm font-medium text-foreground">No torrents found</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {search ? 'Try adjusting your search query' : 'Queue is currently empty'}
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                filteredTorrents.map((t) => {
+                  const isSelected = selectedHashes.has(t.hash);
+                  const progressPct = Math.round((t.progress || 0) * 100);
+                  const isDone = t.progress === 1;
+
+                  return (
+                    <tr
+                      key={t.hash}
+                      className={cn(
+                        'transition-colors cursor-pointer group',
+                        isSelected ? 'bg-raised/70' : 'hover:bg-elevated/50'
                       )}
-                    </td>
-                    <td>{formatBytes(t.size)}</td>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <progress
-                          className={`progress w-20 ${
-                            t.progress === 1 ? 'progress-success' : 'progress-primary'
-                          }`}
-                          value={progressPct}
-                          max="100"
-                        ></progress>
-                        <span className="text-xs">{progressPct}%</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span
-                        className={`badge badge-sm uppercase text-[10px] ${
-                          t.state.includes('download')
-                            ? 'badge-primary'
-                            : t.state.includes('upload') || t.state.includes('seed')
-                            ? 'badge-success'
-                            : t.state.includes('pause')
-                            ? 'badge-warning'
-                            : t.state.includes('error')
-                            ? 'badge-error'
-                            : 'badge-ghost'
-                        }`}
+                      onClick={() => viewDetails(t)}
+                    >
+                      <td
+                        className="py-2.5 px-3 text-center"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        {t.state}
-                      </span>
-                    </td>
-                    <td>{formatSpeed(t.dlspeed)}</td>
-                    <td>{formatEta(t.eta)}</td>
-                    <td>{t.num_seeds ?? '-'}</td>
-                    <td>{t.num_leechs ?? '-'}</td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                        <input
+                          type="checkbox"
+                          className="rounded border-border accent-primary cursor-pointer"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(t.hash)}
+                        />
+                      </td>
+                      <td className="py-2.5 px-3 max-w-xs md:max-w-md truncate font-medium text-foreground">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate" title={t.name}>
+                            {t.name}
+                          </span>
+                          {t.category && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-elevated border border-border text-muted-foreground shrink-0">
+                              {t.category}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">
+                        {formatBytes(t.size)}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-elevated rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full transition-all duration-300 rounded-full',
+                                isDone ? 'bg-success' : 'bg-primary'
+                              )}
+                              style={{ width: `${progressPct}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-mono text-muted-foreground w-8 text-right">
+                            {progressPct}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={cn(
+                            'inline-flex items-center text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full border',
+                            t.state.includes('download')
+                              ? 'bg-primary/10 border-primary/30 text-accent-foreground'
+                              : t.state.includes('upload') || t.state.includes('seed')
+                              ? 'bg-success/10 border-success/30 text-success'
+                              : t.state.includes('pause')
+                              ? 'bg-warning/10 border-warning/30 text-warning'
+                              : t.state.includes('error')
+                              ? 'bg-destructive/10 border-destructive/30 text-destructive-text'
+                              : 'bg-elevated border-border text-muted-foreground'
+                          )}
+                        >
+                          {t.state}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-xs text-primary">
+                        {formatSpeed(t.dlspeed)}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">
+                        {formatEta(t.eta)}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">
+                        {t.num_seeds ?? '-'}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">
+                        {t.num_leechs ?? '-'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="modal modal-open">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg text-error flex items-center gap-2">
-              <i className="bi bi-exclamation-triangle-fill"></i> Delete Torrents
-            </h3>
-            <p className="py-4">
-              Are you sure you want to delete {selectedHashes.size} selected torrent(s)?
-            </p>
-            <div className="form-control">
-              <label className="label cursor-pointer justify-start gap-3">
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-error checkbox-sm"
-                  checked={deleteFiles}
-                  onChange={(e) => setDeleteFiles(e.target.checked)}
-                />
-                <span className="label-text">Also delete downloaded files from disk</span>
-              </label>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-xs">
+          <div className="rounded-xl border border-border bg-card shadow-2xl p-6 max-w-md w-full space-y-4">
+            <div className="flex items-center gap-2.5 text-destructive-text font-semibold text-lg">
+              <AlertTriangle className="w-5 h-5" />
+              <span>Delete Torrents</span>
             </div>
-            <div className="modal-action">
-              <button
-                className="btn btn-ghost btn-sm"
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to remove {selectedHashes.size} selected item(s) from Decypharr?
+            </p>
+            <label className="flex items-center gap-3 p-3 rounded-lg bg-elevated border border-border cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="rounded border-border accent-destructive cursor-pointer"
+                checked={deleteFiles}
+                onChange={(e) => setDeleteFiles(e.target.checked)}
+              />
+              <span className="text-xs text-foreground font-medium">
+                Also permanently delete downloaded files from disk
+              </span>
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setShowDeleteModal(false)}
               >
                 Cancel
-              </button>
-              <button
-                className="btn btn-error btn-sm"
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
                 onClick={handleDelete}
               >
-                Delete
-              </button>
+                Delete Items
+              </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Torrent Details Drawer/Modal */}
+      {/* Torrent Details Modal */}
       {selectedTorrent && (
-        <div className="modal modal-open">
-          <div className="modal-box max-w-4xl max-h-[85vh] flex flex-col">
-            <div className="flex justify-between items-start border-b border-base-300 pb-3">
-              <div>
-                <h3 className="font-bold text-lg truncate max-w-xl" title={selectedTorrent.name}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-xs">
+          <div className="rounded-xl border border-border bg-card shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="flex justify-between items-start p-5 border-b border-border bg-elevated/40">
+              <div className="min-w-0 pr-4">
+                <h3 className="font-semibold text-base text-foreground truncate" title={selectedTorrent.name}>
                   {selectedTorrent.name}
                 </h3>
-                <div className="text-xs text-base-content/60 font-mono mt-1">
+                <div className="text-xs font-mono text-muted-foreground mt-1 truncate">
                   Hash: {selectedTorrent.hash}
                 </div>
               </div>
               <button
-                className="btn btn-sm btn-circle btn-ghost"
+                type="button"
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-elevated cursor-pointer"
                 onClick={() => setSelectedTorrent(null)}
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-4 text-xs">
-              <div className="bg-base-200/60 p-2.5 rounded-lg">
-                <div className="opacity-60">Size</div>
-                <div className="font-bold text-sm">{formatBytes(selectedTorrent.size)}</div>
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border-b border-border">
+              <div className="bg-card p-3.5">
+                <div className="text-[11px] font-semibold uppercase text-muted-foreground">Size</div>
+                <div className="font-mono text-sm font-semibold text-foreground mt-0.5">
+                  {formatBytes(selectedTorrent.size)}
+                </div>
               </div>
-              <div className="bg-base-200/60 p-2.5 rounded-lg">
-                <div className="opacity-60">Status</div>
-                <div className="font-bold text-sm uppercase">{selectedTorrent.state}</div>
+              <div className="bg-card p-3.5">
+                <div className="text-[11px] font-semibold uppercase text-muted-foreground">Status</div>
+                <div className="text-xs uppercase font-semibold text-foreground mt-0.5">
+                  {selectedTorrent.state}
+                </div>
               </div>
-              <div className="bg-base-200/60 p-2.5 rounded-lg">
-                <div className="opacity-60">DL Speed</div>
-                <div className="font-bold text-sm text-primary">
+              <div className="bg-card p-3.5">
+                <div className="text-[11px] font-semibold uppercase text-muted-foreground">Download</div>
+                <div className="font-mono text-sm font-semibold text-primary mt-0.5">
                   {formatSpeed(selectedTorrent.dlspeed)}
                 </div>
               </div>
-              <div className="bg-base-200/60 p-2.5 rounded-lg">
-                <div className="opacity-60">UP Speed</div>
-                <div className="font-bold text-sm text-secondary">
+              <div className="bg-card p-3.5">
+                <div className="text-[11px] font-semibold uppercase text-muted-foreground">Upload</div>
+                <div className="font-mono text-sm font-semibold text-accent-foreground mt-0.5">
                   {formatSpeed(selectedTorrent.upspeed)}
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
-              <h4 className="font-semibold text-sm mb-2">Files ({files.length})</h4>
+            {/* Files List */}
+            <div className="flex-1 overflow-y-auto p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="w-4 h-4 text-muted-foreground" />
+                <h4 className="font-semibold text-sm text-foreground">
+                  Files ({files.length})
+                </h4>
+              </div>
+
               {loadingFiles ? (
-                <div className="text-center py-6">
-                  <span className="loading loading-spinner loading-sm"></span>
+                <div className="text-center py-10 text-muted-foreground">
+                  <div className="inline-block w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-xs mt-2">Loading file contents...</p>
                 </div>
               ) : files.length === 0 ? (
-                <div className="text-sm opacity-60 italic py-4">No file details available</div>
+                <div className="text-sm text-muted-foreground italic py-6 text-center">
+                  No individual file details available
+                </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="table table-xs w-full">
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="border-b border-base-300">
-                        <th>File Name</th>
-                        <th className="w-24">Size</th>
-                        <th className="w-32">Progress</th>
+                      <tr className="bg-elevated/60 border-b border-border text-muted-foreground font-semibold">
+                        <th className="py-2 px-3">File Name</th>
+                        <th className="py-2 px-3 w-24">Size</th>
+                        <th className="py-2 px-3 w-32">Progress</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-border">
                       {files.map((f, idx) => (
-                        <tr key={idx} className="hover:bg-base-200/50">
-                          <td className="max-w-md truncate" title={f.name}>
+                        <tr key={idx} className="hover:bg-elevated/40">
+                          <td className="py-2 px-3 max-w-md truncate text-foreground" title={f.name}>
                             {f.name}
                           </td>
-                          <td>{formatBytes(f.size)}</td>
-                          <td>
-                            <div className="flex items-center gap-2">
-                              <progress
-                                className="progress progress-primary w-16"
-                                value={Math.round((f.progress || 0) * 100)}
-                                max="100"
-                              ></progress>
-                              <span className="text-[11px]">
-                                {Math.round((f.progress || 0) * 100)}%
-                              </span>
-                            </div>
+                          <td className="py-2 px-3 font-mono text-muted-foreground">
+                            {formatBytes(f.size)}
+                          </td>
+                          <td className="py-2 px-3 font-mono">
+                            {Math.round((f.progress || 0) * 100)}%
                           </td>
                         </tr>
                       ))}
@@ -507,13 +629,14 @@ export const DashboardPage: React.FC = () => {
               )}
             </div>
 
-            <div className="modal-action border-t border-base-300 pt-3">
-              <button
-                className="btn btn-sm btn-ghost"
+            <div className="p-4 border-t border-border flex justify-end bg-elevated/30">
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setSelectedTorrent(null)}
               >
                 Close
-              </button>
+              </Button>
             </div>
           </div>
         </div>

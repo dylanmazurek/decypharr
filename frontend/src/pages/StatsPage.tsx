@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { StatsData } from '../types';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StatusStrip, StatCell } from '../components/ui/StatusStrip';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import {
+  Clock,
+  Cpu,
+  Database,
+  ArrowDownUp,
+  RotateCw,
+  Terminal,
+} from 'lucide-react';
 
 export const StatsPage: React.FC = () => {
   const [stats, setStats] = useState<StatsData | null>(null);
@@ -44,66 +56,66 @@ export const StatsPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center gap-3">
-        <i className="bi bi-graph-up text-2xl text-secondary"></i>
-        <div>
-          <h2 className="text-xl font-bold">System Telemetry & Stats</h2>
-          <p className="text-xs text-base-content/60">
-            Real-time server metrics, resource usage, and account statistics
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="System Telemetry"
+        subtitle="Real-time server resource usage and runtime diagnostics"
+        actions={
+          <Button variant="outline" size="sm" onClick={fetchStats}>
+            <RotateCw className="w-3.5 h-3.5" />
+            Refresh
+          </Button>
+        }
+      />
 
       {loading && !stats ? (
-        <div className="text-center py-16">
-          <span className="loading loading-spinner loading-lg text-primary"></span>
-        </div>
+        <Card className="text-center py-16 text-muted-foreground">
+          <div className="inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="mt-2 text-xs">Loading telemetry...</p>
+        </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="stat bg-base-100 rounded-xl border border-base-300">
-            <div className="stat-figure text-primary">
-              <i className="bi bi-clock-history text-3xl"></i>
-            </div>
-            <div className="stat-title">Uptime</div>
-            <div className="stat-value text-2xl">{formatUptime(stats?.uptime)}</div>
-            <div className="stat-desc">Since last server start</div>
-          </div>
+        <div className="space-y-6">
+          {/* Status Strip metrics */}
+          <StatusStrip columns={4}>
+            <StatCell
+              label="Uptime"
+              value={<span className="font-mono">{formatUptime(stats?.uptime)}</span>}
+              subtext="Since last startup"
+              icon={<Clock className="w-4 h-4 text-primary" />}
+              statusDot="ok"
+            />
+            <StatCell
+              label="Goroutines"
+              value={<span className="font-mono">{stats?.goroutines ?? 0}</span>}
+              subtext="Active Go threads"
+              icon={<Cpu className="w-4 h-4 text-accent-foreground" />}
+            />
+            <StatCell
+              label="Memory Alloc"
+              value={<span className="font-mono">{formatBytes(stats?.memory_alloc)}</span>}
+              subtext={`System: ${formatBytes(stats?.memory_sys)}`}
+              icon={<Database className="w-4 h-4 text-muted-foreground" />}
+            />
+            <StatCell
+              label="Total Torrents"
+              value={<span className="font-mono">{stats?.torrents_count ?? 0}</span>}
+              subtext={`${stats?.active_downloads ?? 0} downloading`}
+              icon={<ArrowDownUp className="w-4 h-4 text-success" />}
+            />
+          </StatusStrip>
 
-          <div className="stat bg-base-100 rounded-xl border border-base-300">
-            <div className="stat-figure text-secondary">
-              <i className="bi bi-cpu text-3xl"></i>
-            </div>
-            <div className="stat-title">Goroutines</div>
-            <div className="stat-value text-2xl">{stats?.goroutines ?? 0}</div>
-            <div className="stat-desc">Active Go threads</div>
-          </div>
-
-          <div className="stat bg-base-100 rounded-xl border border-base-300">
-            <div className="stat-figure text-accent">
-              <i className="bi bi-memory text-3xl"></i>
-            </div>
-            <div className="stat-title">Memory Alloc</div>
-            <div className="stat-value text-2xl">{formatBytes(stats?.memory_alloc)}</div>
-            <div className="stat-desc">Sys: {formatBytes(stats?.memory_sys)}</div>
-          </div>
-
-          <div className="stat bg-base-100 rounded-xl border border-base-300">
-            <div className="stat-figure text-info">
-              <i className="bi bi-arrow-down-up text-3xl"></i>
-            </div>
-            <div className="stat-title">Active Torrents</div>
-            <div className="stat-value text-2xl">{stats?.torrents_count ?? 0}</div>
-            <div className="stat-desc">{stats?.active_downloads ?? 0} downloading</div>
-          </div>
-
-          {/* Details / Raw JSON view if extra fields exist */}
+          {/* Raw Diagnostics JSON block */}
           {stats && (
-            <div className="col-span-full bg-base-100 rounded-xl border border-base-300 p-5 mt-4">
-              <h3 className="font-semibold text-sm mb-3">System Diagnostics</h3>
-              <pre className="bg-base-200 p-4 rounded-lg text-xs font-mono overflow-x-auto max-h-80">
+            <Card className="p-5 space-y-3">
+              <div className="flex items-center gap-2 border-b border-border pb-3">
+                <Terminal className="w-4 h-4 text-muted-foreground" />
+                <h3 className="font-semibold text-sm text-foreground">
+                  Runtime Diagnostics Payload
+                </h3>
+              </div>
+              <pre className="p-4 rounded-lg bg-elevated border border-border text-xs font-mono text-foreground/90 overflow-x-auto max-h-96 leading-relaxed">
                 {JSON.stringify(stats, null, 2)}
               </pre>
-            </div>
+            </Card>
           )}
         </div>
       )}

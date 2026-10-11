@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { PageHeader } from '../components/ui/PageHeader';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import {
+  ShieldCheck,
+  RotateCcw,
+  CheckCircle2,
+  AlertTriangle,
+  ClipboardCheck,
+} from 'lucide-react';
+import { cn } from '../lib/utils';
 
 export const RepairPage: React.FC = () => {
   const { addToast } = useToast();
@@ -57,116 +68,117 @@ export const RepairPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <i className="bi bi-tools text-2xl text-warning"></i>
-          <div>
-            <h2 className="text-xl font-bold">Repair & Health Check</h2>
-            <p className="text-xs text-base-content/60">
-              Verify integrity of downloaded media files and reacquire broken or missing torrents
-            </p>
+      <PageHeader
+        title="Repair & Health Check"
+        subtitle="Verify integrity of downloaded media files and reacquire broken torrents"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleReacquire()}
+              disabled={reacquiring}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              {reacquiring ? 'Reacquiring...' : 'Reacquire All Broken'}
+            </Button>
+            {/* Exactly one primary amber button per screen */}
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleRunCheck}
+              disabled={checking}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              {checking ? 'Scanning...' : 'Run Health Check'}
+            </Button>
           </div>
-        </div>
+        }
+      />
 
-        <div className="flex items-center gap-2">
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={handleRunCheck}
-            disabled={checking}
-          >
-            {checking ? (
-              <span className="loading loading-spinner loading-xs"></span>
-            ) : (
-              <i className="bi bi-shield-check"></i>
-            )}
-            Run Health Check
-          </button>
-          <button
-            className="btn btn-warning btn-sm"
-            onClick={() => handleReacquire()}
-            disabled={reacquiring}
-          >
-            {reacquiring ? (
-              <span className="loading loading-spinner loading-xs"></span>
-            ) : (
-              <i className="bi bi-arrow-repeat"></i>
-            )}
-            Reacquire All Broken
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-base-100 rounded-xl border border-base-300 p-4">
+      <Card className="overflow-hidden p-0">
         {checking ? (
-          <div className="text-center py-16">
-            <span className="loading loading-spinner loading-lg text-primary"></span>
-            <p className="text-sm opacity-70 mt-3">Scanning media files for integrity...</p>
+          <div className="text-center py-20 text-muted-foreground">
+            <div className="inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-sm font-medium text-foreground mt-3">Scanning media files for integrity...</p>
+            <p className="text-xs text-muted-foreground mt-1">This may take a moment depending on library size</p>
           </div>
         ) : report === null ? (
-          <div className="text-center py-16 text-base-content/60">
-            <i className="bi bi-clipboard-pulse text-5xl block mb-3 opacity-40"></i>
-            <p className="font-medium">No scan report available</p>
-            <p className="text-xs opacity-70 mt-1">
-              Click &quot;Run Health Check&quot; above to scan your storage for corrupted or missing media.
+          <div className="text-center py-20 text-muted-foreground">
+            <ClipboardCheck className="w-10 h-10 mx-auto opacity-30 mb-3" />
+            <p className="font-medium text-foreground">No scan report available</p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+              Click &quot;Run Health Check&quot; above to scan your storage for corrupted or missing media files.
             </p>
           </div>
         ) : report.length === 0 ? (
-          <div className="text-center py-16 text-success">
-            <i className="bi bi-check-circle-fill text-5xl block mb-3"></i>
-            <p className="font-bold text-lg">All files are healthy!</p>
-            <p className="text-xs opacity-70 mt-1">No missing or corrupted files were detected.</p>
+          <div className="text-center py-20">
+            <CheckCircle2 className="w-10 h-10 text-success mx-auto mb-3" />
+            <p className="font-semibold text-foreground text-base">All files are healthy!</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              No corrupted, damaged, or missing files were detected in your media storage.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="table table-sm w-full">
+            <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className="border-b border-base-300">
-                  <th>Status</th>
-                  <th>Path / Title</th>
-                  <th>Message</th>
-                  <th className="text-right">Action</th>
+                <tr className="bg-elevated/70 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground select-none">
+                  <th className="py-2.5 px-4 w-28">Status</th>
+                  <th className="py-2.5 px-4">Path / Title</th>
+                  <th className="py-2.5 px-4">Message</th>
+                  <th className="py-2.5 px-4 text-right w-36">Action</th>
                 </tr>
               </thead>
-              <tbody>
-                {report.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-base-200/50">
-                    <td>
-                      <span
-                        className={`badge badge-sm uppercase ${
-                          item.status === 'ok' || item.status === 'healthy'
-                            ? 'badge-success'
-                            : item.status === 'corrupt' || item.status === 'broken'
-                            ? 'badge-error'
-                            : item.status === 'repairing'
-                            ? 'badge-info'
-                            : 'badge-warning'
-                        }`}
-                      >
-                        {item.status || 'Issue'}
-                      </span>
-                    </td>
-                    <td className="font-mono text-xs max-w-md truncate" title={item.entry_name || item.path}>
-                      {item.entry_name || item.path}
-                    </td>
-                    <td className="text-xs opacity-70">{item.failure_reason || item.message || '-'}</td>
-                    <td className="text-right">
-                      {(item.entry_name || item.torrent_hash) && (
-                        <button
-                          className="btn btn-xs btn-outline btn-warning"
-                          onClick={() => handleReacquire(item.entry_name || item.torrent_hash)}
-                          disabled={reacquiring}
+              <tbody className="divide-y divide-border">
+                {report.map((item, idx) => {
+                  const isHealthy = item.status === 'ok' || item.status === 'healthy';
+                  const isCorrupt = item.status === 'corrupt' || item.status === 'broken';
+
+                  return (
+                    <tr key={idx} className="hover:bg-elevated/50 transition-colors">
+                      <td className="py-2.5 px-4">
+                        <span
+                          className={cn(
+                            'inline-flex items-center text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full border',
+                            isHealthy
+                              ? 'bg-success/10 border-success/30 text-success'
+                              : isCorrupt
+                              ? 'bg-destructive/10 border-destructive/30 text-destructive-text'
+                              : 'bg-warning/10 border-warning/30 text-warning'
+                          )}
                         >
-                          Fix / Reacquire
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                          {item.status || 'Issue'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 font-mono text-xs max-w-md truncate text-foreground" title={item.entry_name || item.path}>
+                        {item.entry_name || item.path}
+                      </td>
+                      <td className="py-2.5 px-4 text-xs text-muted-foreground">
+                        {item.failure_reason || item.message || '-'}
+                      </td>
+                      <td className="py-2.5 px-4 text-right">
+                        {(item.entry_name || item.torrent_hash) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleReacquire(item.entry_name || item.torrent_hash)}
+                            disabled={reacquiring}
+                            className="text-xs h-7 px-2"
+                          >
+                            <AlertTriangle className="w-3 h-3 text-warning" />
+                            Fix
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 };

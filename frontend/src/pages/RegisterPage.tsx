@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { api, apiUrl } from '../services/api';
 import { useRouter } from '../context/RouterContext';
 import { useToast } from '../context/ToastContext';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Lock, User, UserPlus } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
   const { navigate } = useRouter();
@@ -42,23 +45,24 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-base-200 flex items-center justify-center p-4">
-      <div className="card w-full max-w-sm bg-base-100 shadow-xl border border-base-300">
-        <form onSubmit={handleSubmit} className="card-body">
-          <div className="flex flex-col items-center mb-4">
-            <img src="./images/logo.png" alt="Decypharr" className="w-14 h-14 mb-2 object-contain" />
-            <h2 className="card-title text-xl font-bold">Register Account</h2>
-            <p className="text-xs text-base-content/60">Create admin user</p>
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm p-6 shadow-2xl">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex flex-col items-center text-center mb-6">
+            <img src="./images/logo.png" alt="Decypharr" className="w-12 h-12 mb-3 object-contain" />
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">Create Account</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Register administrative user</p>
           </div>
 
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium text-xs">Username</span>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5" />
+              Username
             </label>
             <input
               type="text"
               placeholder="Username"
-              className="input input-bordered input-sm"
+              className="w-full h-9 px-3 text-sm rounded-lg bg-elevated border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -66,56 +70,61 @@ export const RegisterPage: React.FC = () => {
             />
           </div>
 
-          <div className="form-control mt-2">
-            <label className="label">
-              <span className="label-text font-medium text-xs">Password</span>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5" />
+              Password
             </label>
             <input
               type="password"
               placeholder="Password"
-              className="input input-bordered input-sm"
+              className="w-full h-9 px-3 text-sm rounded-lg bg-elevated border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>
 
-          <div className="form-control mt-2">
-            <label className="label">
-              <span className="label-text font-medium text-xs">Confirm Password</span>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5" />
+              Confirm Password
             </label>
             <input
               type="password"
               placeholder="Confirm Password"
-              className="input input-bordered input-sm"
+              className="w-full h-9 px-3 text-sm rounded-lg bg-elevated border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
             />
           </div>
 
-          <div className="form-control mt-6">
-            <button
+          <div className="pt-2">
+            <Button
               type="submit"
-              className="btn btn-primary btn-sm w-full"
+              variant="primary"
+              size="md"
+              className="w-full justify-center"
               disabled={loading}
             >
-              {loading ? <span className="loading loading-spinner loading-xs"></span> : 'Register'}
-            </button>
+              <UserPlus className="w-4 h-4" />
+              {loading ? 'Creating...' : 'Register'}
+            </Button>
           </div>
 
-          <div className="text-center mt-3 text-xs">
-            <span className="text-base-content/60">Already have an account? </span>
+          <div className="text-center pt-2 text-xs text-muted-foreground">
+            <span>Already have an account? </span>
             <button
               type="button"
-              className="link link-primary font-medium"
+              className="text-primary hover:underline font-semibold cursor-pointer"
               onClick={() => navigate('/login')}
             >
-              Login
+              Sign In
             </button>
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 };

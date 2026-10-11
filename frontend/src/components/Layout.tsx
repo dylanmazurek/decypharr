@@ -1,181 +1,235 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from '../context/RouterContext';
-import { getMeta, api } from '../services/api';
-
-const THEMES = [
-  'dark',
-  'light',
-  'synthwave',
-  'cyberpunk',
-  'dracula',
-  'night',
-  'dim',
-  'sunset',
-  'nord',
-];
+import { api, getMeta } from '../services/api';
+import {
+  LayoutDashboard,
+  CloudDownload,
+  FolderOpen,
+  Wrench,
+  BarChart3,
+  Settings,
+  Menu,
+  X,
+  LogOut,
+  User,
+  Shield,
+} from 'lucide-react';
+import { cn } from '../lib/utils';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentPath, navigate } = useRouter();
   const meta = getMeta();
-  const [currentTheme, setCurrentTheme] = useState(() => {
-    return localStorage.getItem('decypharr-theme') || 'dark';
-  });
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', currentTheme);
-    localStorage.setItem('decypharr-theme', currentTheme);
-  }, [currentTheme]);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const navItems = [
-    { label: 'Dashboard', path: '/', icon: 'bi-speedometer2' },
-    { label: 'Download', path: '/download', icon: 'bi-cloud-download' },
-    { label: 'Browse', path: '/browse', icon: 'bi-folder2-open' },
-    { label: 'Repair', path: '/repair', icon: 'bi-tools' },
-    { label: 'Stats', path: '/stats', icon: 'bi-graph-up' },
-    { label: 'Settings', path: '/config', icon: 'bi-gear' },
+    { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { label: 'Download', path: '/download', icon: CloudDownload },
+    { label: 'Browse', path: '/browse', icon: FolderOpen },
+    { label: 'Repair', path: '/repair', icon: Wrench },
+    { label: 'Stats', path: '/stats', icon: BarChart3 },
+    { label: 'Settings', path: '/config', icon: Settings },
   ];
 
   const handleLogout = async () => {
     await api.logout();
   };
 
-  return (
-    <div className="drawer lg:drawer-open min-h-screen bg-base-200 text-base-content">
-      <input
-        id="main-drawer"
-        type="checkbox"
-        className="drawer-toggle"
-        checked={drawerOpen}
-        onChange={(e) => setDrawerOpen(e.target.checked)}
-      />
-
-      <div className="drawer-content flex flex-col min-h-screen">
-        {/* Top Navbar */}
-        <header className="navbar bg-base-100 border-b border-base-300 px-4 sticky top-0 z-30 shadow-xs">
-          <div className="flex-none lg:hidden">
-            <label htmlFor="main-drawer" className="btn btn-square btn-ghost">
-              <i className="bi bi-list text-2xl"></i>
-            </label>
-          </div>
-
-          <div className="flex-1 flex items-center gap-2">
-            <img src="./images/logo.png" alt="Decypharr" className="w-8 h-8 rounded-sm object-contain" />
-            <span className="font-bold text-lg tracking-wide hidden sm:inline">Decypharr</span>
-            <span className="badge badge-sm badge-neutral">{meta.version}</span>
-          </div>
-
-          <div className="flex-none flex items-center gap-2">
-            {/* Theme selector */}
-            <div className="dropdown dropdown-end">
-              <div tabIndex={0} role="button" className="btn btn-ghost btn-sm">
-                <i className="bi bi-palette text-base mr-1"></i>
-                <span className="capitalize hidden md:inline">{currentTheme}</span>
-              </div>
-              <ul
-                tabIndex={0}
-                className="dropdown-content menu p-2 shadow-sm bg-base-100 rounded-box w-40 z-50 border border-base-300 max-h-80 overflow-y-auto"
-              >
-                {THEMES.map((theme) => (
-                  <li key={theme}>
-                    <button
-                      className={theme === currentTheme ? 'active' : ''}
-                      onClick={() => setCurrentTheme(theme)}
-                    >
-                      {theme}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* User profile / Logout */}
-            {meta.authEnabled && (
-              <div className="dropdown dropdown-end">
-                <div tabIndex={0} role="button" className="btn btn-ghost btn-circle avatar placeholder">
-                  <div className="bg-primary text-primary-content rounded-full w-8">
-                    <span className="text-xs uppercase">
-                      {meta.user ? meta.user.substring(0, 2) : <i className="bi bi-person"></i>}
-                    </span>
-                  </div>
-                </div>
-                <ul
-                  tabIndex={0}
-                  className="dropdown-content menu p-2 shadow-sm bg-base-100 rounded-box w-48 z-50 border border-base-300"
-                >
-                  {meta.user && (
-                    <li className="menu-title px-4 py-2 border-b border-base-300">
-                      <span className="font-semibold">{meta.user}</span>
-                    </li>
-                  )}
-                  <li>
-                    <button onClick={() => navigate('/config')}>
-                      <i className="bi bi-gear mr-2"></i>Settings
-                    </button>
-                  </li>
-                  <li>
-                    <button onClick={handleLogout} className="text-error">
-                      <i className="bi bi-box-arrow-right mr-2"></i>Logout
-                    </button>
-                  </li>
-                </ul>
-              </div>
+  const renderNavLinks = (onItemClick?: () => void) => (
+    <nav className="space-y-1 px-3 py-2">
+      {navItems.map((item) => {
+        const isActive =
+          item.path === '/'
+            ? currentPath === '/'
+            : currentPath.startsWith(item.path);
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.path}
+            type="button"
+            onClick={() => {
+              navigate(item.path);
+              if (onItemClick) onItemClick();
+            }}
+            className={cn(
+              'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left cursor-pointer select-none',
+              isActive
+                ? 'bg-raised text-foreground font-semibold shadow-selected-y'
+                : 'text-muted-foreground hover:text-foreground hover:bg-elevated'
             )}
-          </div>
-        </header>
+          >
+            <Icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-primary' : 'text-muted-foreground')} />
+            <span className="truncate">{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
 
-        {/* Page Content */}
-        <main className="flex-1 p-4 md:p-6 overflow-x-hidden">
-          {children}
-        </main>
-      </div>
-
-      {/* Sidebar Drawer */}
-      <div className="drawer-side z-40">
-        <label htmlFor="main-drawer" aria-label="close sidebar" className="drawer-overlay"></label>
-        <aside className="bg-base-100 w-64 min-h-full border-r border-base-300 flex flex-col justify-between">
-          <div>
-            <div className="p-4 flex items-center gap-3 border-b border-base-300">
-              <img src="./images/logo.png" alt="Decypharr" className="w-9 h-9 object-contain" />
-              <div>
-                <h1 className="font-extrabold text-lg leading-tight">Decypharr</h1>
-                <p className="text-xs opacity-60">Media Manager</p>
-              </div>
+  return (
+    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row antialiased font-sans">
+      {/* Desktop Fixed Left Rail (240px) */}
+      <aside className="w-60 shrink-0 h-screen sticky top-0 hidden md:flex flex-col bg-card/85 backdrop-blur-md border-r border-border select-none z-30">
+        {/* Brand Lockup */}
+        <div className="h-16 flex items-center justify-between px-4 border-b border-border">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img
+              src="./images/logo.png"
+              alt="Decypharr"
+              className="w-7 h-7 rounded-md object-contain shrink-0"
+              onError={(e) => {
+                // Fallback icon if logo image not found
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+            <div className="min-w-0">
+              <span className="font-semibold text-base tracking-tight text-foreground block truncate">
+                Decypharr
+              </span>
+              <span className="text-[11px] font-medium text-muted-foreground block truncate">
+                Media Manager
+              </span>
             </div>
+          </div>
+          {meta.version && (
+            <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-md bg-elevated border border-border text-muted-foreground shrink-0">
+              {meta.version}
+            </span>
+          )}
+        </div>
 
-            <ul className="menu p-4 gap-1 text-base">
-              {navItems.map((item) => {
-                const isActive =
-                  item.path === '/'
-                    ? currentPath === '/'
-                    : currentPath.startsWith(item.path);
-                return (
-                  <li key={item.path}>
+        {/* Navigation list */}
+        <div className="flex-1 overflow-y-auto py-3">
+          {renderNavLinks()}
+        </div>
+
+        {/* Footer info & User Auth */}
+        <div className="p-3 border-t border-border mt-auto space-y-2">
+          {meta.authEnabled && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="w-full flex items-center justify-between p-2 rounded-lg bg-elevated hover:bg-raised border border-border text-xs transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-full bg-primary/20 text-accent-foreground font-semibold flex items-center justify-center shrink-0">
+                    <User className="w-3.5 h-3.5 text-primary" />
+                  </div>
+                  <span className="font-medium text-foreground truncate">
+                    {meta.user || 'Authenticated'}
+                  </span>
+                </div>
+                <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              </button>
+
+              {userMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setUserMenuOpen(false)}
+                  />
+                  <div className="absolute bottom-full left-0 right-0 mb-1 z-50 rounded-lg bg-elevated border border-border shadow-lg p-1 space-y-1">
                     <button
-                      className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${
-                        isActive
-                          ? 'active bg-primary text-primary-content'
-                          : 'hover:bg-base-200'
-                      }`}
+                      type="button"
                       onClick={() => {
-                        navigate(item.path);
-                        setDrawerOpen(false);
+                        setUserMenuOpen(false);
+                        navigate('/config');
                       }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-raised transition-colors cursor-pointer text-left"
                     >
-                      <i className={`bi ${item.icon} text-lg`}></i>
-                      <span>{item.label}</span>
+                      <Settings className="w-3.5 h-3.5" />
+                      Settings
                     </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-destructive-text hover:bg-destructive/10 transition-colors cursor-pointer text-left"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      Sign Out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
-          <div className="p-4 border-t border-base-300 text-xs text-center opacity-60">
-            Decypharr {meta.version}
+          <div className="text-[11px] text-center text-muted-foreground font-mono flex items-center justify-center gap-1.5 pt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-success inline-block"></span>
+            Decypharr v{meta.version || '1.1.5'}
           </div>
-        </aside>
-      </div>
+        </div>
+      </aside>
+
+      {/* Mobile Top Navbar */}
+      <header className="md:hidden sticky top-0 z-30 h-14 bg-card/90 backdrop-blur-md border-b border-border flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMobileDrawerOpen(true)}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-elevated"
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <img src="./images/logo.png" alt="Decypharr" className="w-6 h-6 rounded-sm object-contain" />
+          <span className="font-semibold text-sm tracking-tight text-foreground">Decypharr</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {meta.version && (
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-elevated border border-border text-muted-foreground">
+              {meta.version}
+            </span>
+          )}
+          {meta.authEnabled && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="p-1.5 text-muted-foreground hover:text-destructive-text"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Mobile Drawer Overlay */}
+      {mobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div
+            className="fixed inset-0 bg-background/80 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileDrawerOpen(false)}
+          />
+          <aside className="relative w-64 max-w-[80vw] h-full bg-card border-r border-border flex flex-col z-50 shadow-2xl">
+            <div className="h-14 flex items-center justify-between px-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <img src="./images/logo.png" alt="Decypharr" className="w-6 h-6 rounded-sm object-contain" />
+                <span className="font-semibold text-sm">Decypharr</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(false)}
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-elevated"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-3">
+              {renderNavLinks(() => setMobileDrawerOpen(false))}
+            </div>
+            <div className="p-4 border-t border-border text-xs text-muted-foreground font-mono text-center">
+              Decypharr v{meta.version || '1.1.5'}
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-x-hidden max-w-[1800px] w-full mx-auto">
+        {children}
+      </main>
     </div>
   );
 };

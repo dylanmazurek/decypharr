@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 export type ToastType = 'info' | 'success' | 'warning' | 'error';
 
@@ -33,23 +35,32 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ addToast, removeToast }}>
       {children}
-      <div className="toast toast-bottom toast-end z-50">
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`alert ${
-              t.type === 'success'
-                ? 'alert-success'
-                : t.type === 'error'
-                ? 'alert-error'
-                : t.type === 'warning'
-                ? 'alert-warning'
-                : 'alert-info'
-            } shadow-lg flex items-center justify-between text-sm py-2 px-4 cursor-pointer`}
-            onClick={() => removeToast(t.id)}
+            className={cn(
+              'pointer-events-auto rounded-lg border bg-card shadow-2xl p-3 flex items-center justify-between gap-3 text-xs transition-all animate-fade-in',
+              t.type === 'success' && 'border-success/30 text-foreground',
+              t.type === 'error' && 'border-destructive/30 text-foreground',
+              t.type === 'warning' && 'border-warning/30 text-foreground',
+              t.type === 'info' && 'border-border text-foreground'
+            )}
           >
-            <span>{t.message}</span>
-            <i className="bi bi-x ml-2 text-lg"></i>
+            <div className="flex items-center gap-2.5 min-w-0">
+              {t.type === 'success' && <CheckCircle2 className="w-4 h-4 text-success shrink-0" />}
+              {t.type === 'error' && <AlertCircle className="w-4 h-4 text-destructive-text shrink-0" />}
+              {t.type === 'warning' && <AlertTriangle className="w-4 h-4 text-warning shrink-0" />}
+              {t.type === 'info' && <Info className="w-4 h-4 text-primary shrink-0" />}
+              <span className="font-medium truncate">{t.message}</span>
+            </div>
+            <button
+              type="button"
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-elevated cursor-pointer shrink-0"
+              onClick={() => removeToast(t.id)}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         ))}
       </div>

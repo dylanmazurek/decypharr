@@ -1,14 +1,26 @@
-import { DecypharrMeta, TorrentItem, TorrentFile, BrowseResponse, EntryHealth, StatsData, DecypharrConfig } from '../types';
+import {
+  DecypharrMeta,
+  TorrentItem,
+  TorrentFile,
+  BrowseResponse,
+  EntryHealth,
+  StatsData,
+  DecypharrConfig,
+} from '../types';
+
+export function isMockMode(): boolean {
+  return import.meta.env.VITE_MOCK === 'true' || import.meta.env.MODE === 'mock';
+}
 
 export function getMeta(): DecypharrMeta {
   const injected = window.__DECYPHARR__ || {};
   return {
     urlBase: (injected.urlBase || '').replace(/\/$/, ''),
-    version: injected.version || 'v1.1.5',
+    version: injected.version || (isMockMode() ? 'v1.1.5 (mock)' : 'v1.1.5'),
     setupRequired: Boolean(injected.setupRequired || injected.setupError),
     setupError: injected.setupError || '',
     authEnabled: injected.authEnabled ?? injected.needsAuth ?? true,
-    user: injected.user || '',
+    user: injected.user || (isMockMode() ? 'admin' : ''),
   };
 }
 
@@ -23,7 +35,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Accept': 'application/json',
+      Accept: 'application/json',
       ...options.headers,
     },
   });
@@ -67,7 +79,6 @@ export const api = {
     if (filter && filter !== 'all') params.append('filter', filter);
     if (category) params.append('category', category);
     const qs = params.toString() ? `?${params.toString()}` : '';
-    // Support qBittorrent compatibility API endpoints
     return request<TorrentItem[]>(`/api/v2/torrents/info${qs}`);
   },
 
@@ -204,10 +215,7 @@ export const api = {
   // Auth
   login: async (formData: FormData): Promise<void> => {
     const url = apiUrl('/login');
-    const res = await fetch(url, {
-      method: 'POST',
-      body: formData,
-    });
+    const res = await fetch(url, { method: 'POST', body: formData });
     if (!res.ok) {
       const err = await res.text();
       throw new Error(err || 'Login failed');
@@ -216,10 +224,7 @@ export const api = {
 
   register: async (formData: FormData): Promise<void> => {
     const url = apiUrl('/register');
-    const res = await fetch(url, {
-      method: 'POST',
-      body: formData,
-    });
+    const res = await fetch(url, { method: 'POST', body: formData });
     if (!res.ok) {
       const err = await res.text();
       throw new Error(err || 'Registration failed');
@@ -238,10 +243,7 @@ export const api = {
   // Setup
   submitSetup: async (formData: FormData): Promise<void> => {
     const url = apiUrl('/setup');
-    const res = await fetch(url, {
-      method: 'POST',
-      body: formData,
-    });
+    const res = await fetch(url, { method: 'POST', body: formData });
     if (!res.ok) {
       const err = await res.text();
       throw new Error(err || 'Setup failed');
