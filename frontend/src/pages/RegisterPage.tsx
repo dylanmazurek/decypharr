@@ -31,6 +31,7 @@ export const RegisterPage: React.FC = () => {
       const formData = new FormData();
       formData.append('username', username);
       formData.append('password', password);
+      formData.append('confirmPassword', confirmPassword);
 
       await api.register(formData);
       addToast('Account created successfully! Redirecting...', 'success');

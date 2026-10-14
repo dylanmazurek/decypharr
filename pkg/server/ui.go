@@ -103,7 +103,7 @@ func (s *Server) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if password != confirmPassword && confirmPassword != "" {
+	if password != confirmPassword {
 		http.Error(w, "Passwords do not match", http.StatusBadRequest)
 		return
 	}
