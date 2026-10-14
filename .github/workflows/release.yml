@@ -101,6 +101,7 @@ jobs:
           CGO_ENABLED: 1
           GOOS: linux
           GOARCH: amd64
+          GOPROXY: https://proxy.golang.org|direct
           CC: gcc
           CXX: g++
           VERSION: ${{ needs.prepare.outputs.version }}
