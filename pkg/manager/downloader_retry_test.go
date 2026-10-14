@@ -61,6 +61,52 @@ func TestLocalDownloaderRetriesServiceUnavailable(t *testing.T) {
 	}
 }
 
+func TestLocalDownloaderRetriesCloudflare524Timeout(t *testing.T) {
+	payload := bytes.Repeat([]byte("cloudflare-524-retry"), 2048)
+	var gets atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Content-Length", fmt.Sprint(len(payload)))
+		if r.Method == http.MethodHead {
+			return
+		}
+		if gets.Add(1) == 1 {
+			// Simulate Cloudflare 524 Gateway Timeout
+			w.WriteHeader(524)
+			_, _ = w.Write([]byte("Cloudflare timeout"))
+			return
+		}
+		_, _ = w.Write(payload)
+	}))
+	t.Cleanup(server.Close)
+
+	destination := filepath.Join(t.TempDir(), "release.mkv")
+	var downloaded atomic.Int64
+	d := &Downloader{
+		manager: &Manager{
+			ctx:          t.Context(),
+			streamClient: server.Client(),
+		},
+		logger: zerolog.Nop(),
+	}
+	if err := d.localDownloader(server.URL, destination, nil, func(delta, _ int64) {
+		downloaded.Add(delta)
+	}); err != nil {
+		t.Fatalf("localDownloader() error = %v", err)
+	}
+
+	got, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatalf("read download: %v", err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("downloaded %d bytes, want %d", len(got), len(payload))
+	}
+	if gets.Load() != 2 {
+		t.Fatalf("GET requests = %d, want retry on 524", gets.Load())
+	}
+}
+
 func TestLocalDownloaderResumesAfterUnexpectedEOF(t *testing.T) {
 	payload := bytes.Repeat([]byte("range-resume"), 8192)
 	cut := len(payload) / 2

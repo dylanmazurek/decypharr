@@ -41,6 +41,7 @@ type QueueSchema struct {
 		Title    string   `json:"title"`
 		Messages []string `json:"messages"`
 	} `json:"statusMessages"`
+	ErrorMessage                        string `json:"errorMessage"`
 	DownloadId                          string `json:"downloadId"`
 	Protocol                            string `json:"protocol"`
 	DownloadClient                      string `json:"downloadClient"`
@@ -55,8 +56,12 @@ type QueueSchema struct {
 // config.QueueCleanupRule.ID. text is the lowercased join of a queue item's
 // status message titles and messages.
 var catalogMatchers = map[string]func(item QueueSchema, text string) bool{
-	"failed_download": func(item QueueSchema, _ string) bool {
-		return strings.EqualFold(item.Status, "failed")
+	"failed_download": func(item QueueSchema, text string) bool {
+		return strings.EqualFold(item.Status, "failed") ||
+			strings.EqualFold(item.TrackedDownloadStatus, "error") ||
+			strings.Contains(text, "reporting an error") ||
+			strings.Contains(text, "failed download") ||
+			strings.Contains(text, "stalled with no connections")
 	},
 	"title_mismatch": func(_ QueueSchema, text string) bool {
 		return strings.Contains(text, "title mismatch")
@@ -152,12 +157,22 @@ func (s *Service) CleanupQueue(ctx context.Context, name string) error {
 // and those flagged warning or error are considered, and the first matching
 // rule wins.
 func resolveQueueAction(item QueueSchema, rules []config.QueueCleanupRule) QueueAction {
-	status := strings.ToLower(item.TrackedDownloadStatus)
-	if !strings.EqualFold(item.Status, "failed") && status != "warning" && status != "error" {
+	trackedStatus := strings.ToLower(item.TrackedDownloadStatus)
+	itemStatus := strings.ToLower(item.Status)
+	hasError := strings.EqualFold(item.Status, "failed") ||
+		trackedStatus == "error" ||
+		trackedStatus == "warning" ||
+		itemStatus == "warning" ||
+		item.ErrorMessage != ""
+	if !hasError {
 		return QueueActionNone
 	}
 
 	var builder strings.Builder
+	if item.ErrorMessage != "" {
+		builder.WriteString(item.ErrorMessage)
+		builder.WriteByte(' ')
+	}
 	for _, message := range item.StatusMessages {
 		builder.WriteString(message.Title)
 		builder.WriteByte(' ')
@@ -211,6 +226,45 @@ func (s *Service) removeQueueItems(ctx context.Context, name string, ids []int, 
 	}
 	if err := expectSuccess(resp); err != nil {
 		return fmt.Errorf("remove queue items: %w", err)
+	}
+	return nil
+}
+
+// BlocklistAndRedownload searches the Arr queue for the item matching downloadID (infohash)
+// and instructs the Arr to remove the item, blocklist the stalled release, and search for an alternative (skipRedownload=false).
+func (s *Service) BlocklistAndRedownload(ctx context.Context, arrName string, downloadID string) error {
+	if s == nil || downloadID == "" {
+		return nil
+	}
+	var arrNames []string
+	if arrName != "" {
+		arrNames = []string{arrName}
+	} else {
+		for _, inst := range s.All() {
+			arrNames = append(arrNames, inst.Name)
+		}
+	}
+
+	for _, name := range arrNames {
+		items, err := s.Queue(ctx, name)
+		if err != nil {
+			continue
+		}
+		var targetIDs []int
+		for _, item := range items {
+			if strings.EqualFold(item.DownloadId, downloadID) {
+				targetIDs = append(targetIDs, item.Id)
+			}
+		}
+		if len(targetIDs) > 0 {
+			s.logger.Info().Str("arr", name).Str("downloadId", downloadID).Ints("ids", targetIDs).
+				Msg("Instructing Arr to blocklist stalled release and search for an alternative")
+			if err := s.removeQueueItems(ctx, name, targetIDs, false); err != nil {
+				s.logger.Error().Err(err).Str("arr", name).Msg("Failed to remove and research stalled item in Arr")
+				return err
+			}
+			return nil
+		}
 	}
 	return nil
 }

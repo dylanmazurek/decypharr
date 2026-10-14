@@ -104,3 +104,16 @@ func TestWriteTorrentAddErrorPreservesSemantics(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleSetShareLimits(t *testing.T) {
+	q := &QBit{}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v2/torrents/setShareLimits", strings.NewReader("hashes=abc&ratioLimit=2&seedingTimeLimit=1000"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	q.handleSetShareLimits(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("setShareLimits status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+}
+

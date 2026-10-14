@@ -439,9 +439,11 @@ func (s *Server) handleDeleteTorrent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.manager.Queue().Delete(hash, true, cleanup); err != nil {
-		s.logger.Error().Err(err).Str("hash", hash).Msg("Failed to delete entry from queue")
-		http.Error(w, "Failed to delete entry from queue", http.StatusInternalServerError)
-		return
+		if !strings.Contains(strings.ToLower(err.Error()), "not found") {
+			s.logger.Error().Err(err).Str("hash", hash).Msg("Failed to delete entry from queue")
+			http.Error(w, "Failed to delete entry from queue", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -468,9 +470,11 @@ func (s *Server) handleDeleteTorrents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := s.manager.Queue().DeleteWhere("", config.ProtocolAll, "", hashes, cleanup); err != nil {
-		s.logger.Error().Err(err).Msg("Failed to delete torrents")
-		http.Error(w, "Failed to delete torrents", http.StatusInternalServerError)
-		return
+		if !strings.Contains(strings.ToLower(err.Error()), "not found") {
+			s.logger.Error().Err(err).Msg("Failed to delete torrents")
+			http.Error(w, "Failed to delete torrents", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)

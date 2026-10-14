@@ -101,24 +101,23 @@ func (s *Service) Clear() {
 
 func (s *Service) SyncFromConfig(configured []config.Arr) {
 	updated := make(map[string]Arr, len(configured))
-	for _, c := range configured {
-		updated[c.Name] = fromConfig(c)
-	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for name, current := range s.arrs {
-		instance, ok := updated[name]
-		if !ok {
-			updated[name] = current
-			continue
+
+	for _, c := range configured {
+		instance := fromConfig(c)
+		if current, ok := s.arrs[c.Name]; ok {
+			// Keep the resolved host only when the configured one is unusable.
+			if utils.ValidateURL(instance.Host) != nil {
+				instance.Host = current.Host
+			}
+			instance.Token = cmp.Or(instance.Token, current.Token)
+			if instance.Type == "" || instance.Type == Others {
+				instance.Type = current.Type
+			}
 		}
-		// Keep the resolved host only when the configured one is unusable.
-		if utils.ValidateURL(instance.Host) != nil {
-			instance.Host = current.Host
-		}
-		instance.Token = cmp.Or(instance.Token, current.Token)
-		updated[name] = instance
+		updated[c.Name] = instance
 	}
 	s.arrs = updated
 }

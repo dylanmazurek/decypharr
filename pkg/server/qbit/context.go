@@ -231,18 +231,27 @@ func extractFromSID(sid string) (string, string, error) {
 
 func hashesContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_hashes := chi.URLParam(r, "hashes")
+		var raw []string
+		if q := r.URL.Query().Get("hashes"); q != "" {
+			raw = append(raw, strings.Split(q, "|")...)
+		}
+		if p := chi.URLParam(r, "hashes"); p != "" {
+			raw = append(raw, strings.Split(p, "|")...)
+		}
+		_ = r.ParseForm()
+		for _, f := range r.Form["hashes"] {
+			raw = append(raw, strings.Split(f, "|")...)
+		}
+
 		var hashes []string
-		if _hashes != "" {
-			hashes = strings.Split(_hashes, "|")
-		}
-		if hashes == nil {
-			// GetReader hashes from form
-			_ = r.ParseForm()
-			hashes = r.Form["hashes"]
-		}
-		for i, hash := range hashes {
-			hashes[i] = strings.TrimSpace(hash)
+		seen := make(map[string]struct{})
+		for _, h := range raw {
+			if trimmed := strings.TrimSpace(h); trimmed != "" {
+				if _, exists := seen[trimmed]; !exists {
+					seen[trimmed] = struct{}{}
+					hashes = append(hashes, trimmed)
+				}
+			}
 		}
 		ctx := context.WithValue(r.Context(), hashesKey, hashes)
 		next.ServeHTTP(w, r.WithContext(ctx))

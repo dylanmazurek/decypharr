@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dylanmazurek/decypharr/internal/config"
@@ -234,6 +235,9 @@ func (m *Manager) processQueuedNZB(entry *storage.Entry) {
 
 func (m *Manager) processQueuedTorrent(entry *storage.Entry) {
 	defer m.processingEntries.Delete(entry.InfoHash)
+	if _, err := m.queue.GetTorrent(entry.InfoHash); err != nil {
+		return
+	}
 	placement := entry.GetActiveProvider()
 	if placement == nil {
 		m.logger.Error().Str("name", entry.Name).Msg("No active placement found for queued entry")
@@ -271,6 +275,10 @@ func (m *Manager) processQueuedTorrent(entry *storage.Entry) {
 	dbT, err := client.CheckStatus(debridTorrent)
 	if err != nil {
 		m.logger.Error().Err(err).Str("name", entry.Name).Msg("Error checking status")
+		if strings.Contains(err.Error(), "404") || strings.Contains(strings.ToLower(err.Error()), "not found") {
+			_ = m.queue.Delete(entry.InfoHash, true, nil)
+			return
+		}
 		entry.MarkAsError(err)
 		_ = m.queue.Update(entry)
 
@@ -304,6 +312,7 @@ func (m *Manager) processQueuedTorrent(entry *storage.Entry) {
 	}
 
 	// Update entry progress
+	applyDebridTorrentToEntry(entry, debridTorrent)
 	entry.Progress = debridTorrent.Progress / 100.0
 	entry.Speed = debridTorrent.Speed
 	if size := debridTorrent.GetSize(); size > 0 {
@@ -511,3 +520,64 @@ func (m *Manager) SendToDebrid(ctx context.Context, importRequest *ImportRequest
 	joinedErrors := errors.Join(errs...)
 	return nil, fmt.Errorf("failed to process torrent: %w", joinedErrors)
 }
+
+// processStalledTorrents inspects the queue for torrents that have been downloading with 0 progress
+// and 0 speed/seeders for longer than removeStalledAfter. When stalled, it instructs the Arr to blocklist
+// the bad release and search for an alternative, deletes it from the provider, and removes it from the queue.
+func (m *Manager) processStalledTorrents(ctx context.Context) {
+	stalledTimeout := m.queue.removeStalledAfter
+	if stalledTimeout <= 0 {
+		stalledTimeout = time.Hour
+	}
+	cutoff := time.Now().Add(-stalledTimeout)
+
+	entries := m.queue.ListFilter("", config.ProtocolAll, "", nil, "", false)
+	for _, entry := range entries {
+		if !entry.AddedOn.Before(cutoff) {
+			continue
+		}
+		if entry.Status == debridTypes.TorrentStatusQueued {
+			continue
+		}
+
+		isStalled := false
+		if entry.IsTorrent() {
+			if entry.State == storage.EntryStateError && entry.Progress == 0 {
+				isStalled = true
+			} else if entry.State == storage.EntryStateDownloading && entry.Progress == 0 && (entry.Speed == 0 || entry.Seeders == 0) {
+				isStalled = true
+			}
+		} else if entry.IsNZB() && entry.State == storage.EntryStateError && entry.Progress == 0 {
+			isStalled = true
+		}
+
+		if !isStalled {
+			continue
+		}
+
+		m.logger.Warn().
+			Str("name", entry.Name).
+			Str("hash", entry.InfoHash).
+			Str("category", entry.Category).
+			Dur("stalled_duration", time.Since(entry.AddedOn)).
+			Msg("Torrent stalled with no progress or seeders: removing, blocklisting, and requesting Arr to research alternative")
+
+		// 1. Tell Arr to remove from client, blocklist, and search for a replacement (skipRedownload=false)
+		if m.arr != nil {
+			_ = m.arr.BlocklistAndRedownload(ctx, entry.Category, entry.InfoHash)
+		}
+
+		// 2. Delete on debrid provider (TorBox, etc.)
+		if placement := entry.GetActiveProvider(); placement != nil && placement.ID != "" {
+			if client := m.ProviderClient(placement.Provider); client != nil {
+				go func(pClient common.Client, id string) {
+					_ = pClient.DeleteTorrent(id)
+				}(client, placement.ID)
+			}
+		}
+
+		// 3. Delete from Decypharr queue storage and disk files
+		_ = m.queue.Delete(entry.InfoHash, true, nil)
+	}
+}
+

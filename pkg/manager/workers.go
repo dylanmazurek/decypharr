@@ -55,22 +55,16 @@ func (m *Manager) addQueueProcessorJob(ctx context.Context) error {
 		}
 	}
 
-	if m.config.RemoveStalledAfter != "" {
-		// Stalled torrents removal job
-		if jd, err := utils.ConvertToJobDef("1m"); err != nil {
-			m.logger.Error().Err(err).Msg("Failed to convert remove stalled torrents interval to job definition")
+	// Stalled torrents removal job runs every 1m
+	if jd, err := utils.ConvertToJobDef("1m"); err != nil {
+		m.logger.Error().Err(err).Msg("Failed to convert remove stalled torrents interval to job definition")
+	} else {
+		if _, err := m.scheduler.NewJob(jd, gocron.NewTask(func() {
+			m.processStalledTorrents(ctx)
+		}), gocron.WithContext(ctx)); err != nil {
+			m.logger.Error().Err(err).Msg("Failed to create remove stalled torrents job")
 		} else {
-			// Schedule the job
-			if _, err := m.scheduler.NewJob(jd, gocron.NewTask(func() {
-				err := m.queue.DeleteStalled()
-				if err != nil {
-					m.logger.Error().Err(err).Msg("Failed to process remove stalled torrents")
-				}
-			}), gocron.WithContext(ctx)); err != nil {
-				m.logger.Error().Err(err).Msg("Failed to create remove stalled torrents job")
-			} else {
-				m.logger.Debug().Msgf("Remove stalled torrents job scheduled for every %s", "1m")
-			}
+			m.logger.Debug().Msgf("Remove stalled torrents job scheduled for every 1m")
 		}
 	}
 

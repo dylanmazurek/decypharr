@@ -108,7 +108,7 @@ func (s *SABnzbd) handleDelete(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Use atomic delete operation
-		if err := s.manager.Queue().Delete(nzoID, true, nil); err != nil {
+		if err := s.manager.Queue().Delete(nzoID, true, nil); err != nil && !strings.Contains(strings.ToLower(err.Error()), "not found") {
 			errors = append(errors, fmt.Sprintf("Failed to delete %s: %v", nzoID, err))
 		} else {
 			successCount++
