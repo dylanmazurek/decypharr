@@ -183,6 +183,19 @@ func (tb *Torbox) doPostFormWithClient(client *request.Client, endpoint string, 
 		if err := request.DecodeJSON(resp, result); err != nil {
 			return resp, err
 		}
+	} else if resp.StatusCode >= 400 && resp.ContentLength != 0 {
+		var errResp APIResponse[any]
+		if err := request.DecodeJSON(resp, &errResp); err == nil && (errResp.Detail != "" || errResp.Error != nil) {
+			errStr := fmt.Sprintf("%v", errResp.Error)
+			detailLower := strings.ToLower(errResp.Detail)
+			if errStr == "ACTIVE_LIMIT" || errStr == "QUEUE_LIMIT" || strings.Contains(detailLower, "queued") || strings.Contains(detailLower, "too many") {
+				return resp, customerror.TooManyActiveDownloadsError
+			}
+			if errStr == "DOWNLOAD_NOT_CACHED" || strings.Contains(detailLower, "not cached") {
+				return resp, customerror.TorrentNotCachedError
+			}
+			return resp, fmt.Errorf("torbox API error: Status: %d: %s", resp.StatusCode, errResp.Detail)
+		}
 	}
 
 	return resp, nil
@@ -306,6 +319,18 @@ func (tb *Torbox) SubmitMagnet(torrent *types.Torrent) (*types.Torrent, error) {
 		if cached, known := tb.isCached(torrent.InfoHash); known && !cached {
 			return nil, fmt.Errorf("torrent %s: %w", torrent.Name, customerror.TorrentNotCachedError)
 		}
+	} else {
+		// For uncached downloads, check available active download slots before submitting.
+		// Torbox strictly limits concurrent active downloads (e.g. 10 for Pro).
+		// If all slots are full, fail fast with TooManyActiveDownloadsError so Decypharr holds
+		// the torrent in its local job queue rather than flooding Torbox's remote queue.
+		slots, err := tb.GetAvailableSlots()
+		if err == nil && slots <= 0 {
+			tb.logger.Warn().
+				Str("name", torrent.Name).
+				Msg("Torbox active download slots full; holding in queue retry")
+			return nil, customerror.TooManyActiveDownloadsError
+		}
 	}
 
 	resp, err := tb.doPostFormWithClient(tb.submissionClient(), "/api/torrents/createtorrent", formData, &data)
@@ -316,16 +341,37 @@ func (tb *Torbox) SubmitMagnet(torrent *types.Torrent) (*types.Torrent, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("torbox API error: Status: %d", resp.StatusCode)
 	}
-	if data.Data == nil {
-		return nil, fmt.Errorf("error adding torrent")
+	if !data.Success || data.Data == nil {
+		errMsg := "error adding torrent"
+		if data.Detail != "" {
+			errMsg = fmt.Sprintf("error adding torrent: %s", data.Detail)
+		}
+		if data.Error != nil {
+			errStr := fmt.Sprintf("%v", data.Error)
+			if errStr == "ACTIVE_LIMIT" || errStr == "QUEUE_LIMIT" || strings.Contains(strings.ToLower(data.Detail), "queued") {
+				return nil, customerror.TooManyActiveDownloadsError
+			}
+		}
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 	dt := *data.Data
-	torrentId := strconv.Itoa(dt.Id)
-	torrent.Id = torrentId
-	torrent.Debrid = tb.config.Name
-	torrent.Added = time.Now()
+	torrentId := dt.GetTorrentID()
+	if torrentId > 0 {
+		torrent.Id = strconv.Itoa(torrentId)
+		torrent.Debrid = tb.config.Name
+		torrent.Added = time.Now()
+		return torrent, nil
+	}
 
-	return torrent, nil
+	if dt.QueuedId > 0 || strings.Contains(strings.ToLower(data.Detail), "queued") {
+		tb.logger.Warn().
+			Str("name", torrent.Name).
+			Int("queued_id", dt.QueuedId).
+			Msg("Torbox queued download (slots full); holding in queue retry")
+		return nil, customerror.TooManyActiveDownloadsError
+	}
+
+	return nil, fmt.Errorf("torbox returned neither torrent_id nor queued_id for %s", torrent.Name)
 }
 
 func (tb *Torbox) getTorboxStatus(status string, finished bool) types.TorrentStatus {
@@ -452,6 +498,10 @@ func (tb *Torbox) UpdateTorrent(t *types.Torrent) error {
 }
 
 func (tb *Torbox) updateTorrentWithClient(client *request.Client, t *types.Torrent) error {
+	if t.Id == "" || t.Id == "0" {
+		return fmt.Errorf("cannot check status for invalid torrent id %q", t.Id)
+	}
+
 	var res InfoResponse
 
 	resp, err := tb.doGetWithClient(client, "/api/torrents/mylist", map[string]string{"id": t.Id}, &res)
@@ -462,16 +512,27 @@ func (tb *Torbox) updateTorrentWithClient(client *request.Client, t *types.Torre
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("torbox API error: Status: %d", resp.StatusCode)
 	}
+	if !res.Success || res.Error != nil || res.Data == nil || res.Data.Id == 0 {
+		errMsg := "torrent not found"
+		if res.Detail != "" {
+			errMsg = res.Detail
+		}
+		return fmt.Errorf("error getting torrent: %s (id: %s)", errMsg, t.Id)
+	}
 	data := res.Data
-	if data == nil {
-		return fmt.Errorf("error getting torrent: response data is nil")
+	if strconv.Itoa(data.Id) != t.Id {
+		return fmt.Errorf("torbox torrent id mismatch: expected %s, got %d", t.Id, data.Id)
 	}
 	name := data.Name
 
 	t.Name = name
 	t.Bytes = data.Size
 	t.Progress = data.Progress * 100
-	t.Status = tb.getTorboxStatus(data.DownloadState, data.DownloadFinished)
+	if !data.Active && !data.DownloadFinished {
+		t.Status = types.TorrentStatusError
+	} else {
+		t.Status = tb.getTorboxStatus(data.DownloadState, data.DownloadFinished)
+	}
 	if t.Status == types.TorrentStatusError {
 		tb.logger.Warn().
 			Str("torrent_id", t.Id).
@@ -762,7 +823,27 @@ func (tb *Torbox) GetAvailableSlots() (int, error) {
 	if slots, ok := planSlots[profile.Type]; ok {
 		accountSlots = slots
 	}
-	return accountSlots, nil
+
+	var res TorrentsListResponse
+	resp, err := tb.doGet("/api/torrents/mylist", map[string]string{
+		"bypass_cache": "true",
+	}, &res)
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 || res.Data == nil {
+		return accountSlots, nil
+	}
+
+	activeCount := 0
+	for _, t := range *res.Data {
+		if t.Active {
+			activeCount++
+		}
+	}
+
+	available := accountSlots - activeCount - tb.config.MinimumFreeSlot
+	if available < 0 {
+		return 0, nil
+	}
+	return available, nil
 }
 
 func (tb *Torbox) GetProfile() (*types.Profile, error) {
