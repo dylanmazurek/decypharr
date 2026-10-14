@@ -8,6 +8,8 @@ docker-compose.yml
 **.torrent
 torrents.json
 **/dist/
+!frontend/dist/
+!frontend/dist/**
 *.json
 .ven/**
 docs/**
