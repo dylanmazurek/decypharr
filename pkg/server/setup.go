@@ -52,15 +52,7 @@ func (s *Server) SetupHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	data := map[string]any{
-		"URLBase": cfg.URLBase,
-		"Page":    "setup",
-		"Title":   "Setup Wizard",
-	}
-	err := s.templates.ExecuteTemplate(w, "setup_layout", data)
-	if err != nil {
-		s.logger.Error().Err(err).Msg("template error")
-	}
+	s.serveSPA(w, r)
 }
 
 // sendSetupError sends an error response

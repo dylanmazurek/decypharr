@@ -10,8 +10,10 @@ import (
 	"sync"
 	"testing"
 
+	"errors"
 	"github.com/rs/zerolog"
 	"github.com/dylanmazurek/decypharr/internal/config"
+	"github.com/dylanmazurek/decypharr/internal/customerror"
 	"github.com/dylanmazurek/decypharr/internal/request"
 	"github.com/dylanmazurek/decypharr/internal/utils"
 	"github.com/dylanmazurek/decypharr/pkg/debrid/types"
@@ -238,4 +240,94 @@ func TestGetTorboxStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestSubmitMagnetQueuedResponseReturnsTooManyActiveDownloads(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/torrents/createtorrent" {
+			_, _ = fmt.Fprint(w, `{"success":true,"detail":"Torrent queued successfully.","data":{"hash":"ABC","name":"Test","queued_id":4972750}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(server.Close)
+
+	tb := testTorbox(server.URL)
+	torrent := &types.Torrent{
+		Magnet: &utils.Magnet{Link: "magnet:?xt=urn:btih:ABC"},
+	}
+	_, err := tb.SubmitMagnet(torrent)
+	if !errors.Is(err, customerror.TooManyActiveDownloadsError) {
+		t.Fatalf("SubmitMagnet() error = %v, want TooManyActiveDownloadsError", err)
+	}
+}
+
+func TestSubmitMagnet400QueuedReturnsTooManyActiveDownloads(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = fmt.Fprint(w, `{"success":false,"error":"DIFF_ISSUE","detail":"Download already queued.","data":null}`)
+	}))
+	t.Cleanup(server.Close)
+
+	tb := testTorbox(server.URL)
+	torrent := &types.Torrent{
+		Magnet: &utils.Magnet{Link: "magnet:?xt=urn:btih:ABC"},
+	}
+	_, err := tb.SubmitMagnet(torrent)
+	if !errors.Is(err, customerror.TooManyActiveDownloadsError) {
+		t.Fatalf("SubmitMagnet() error = %v, want TooManyActiveDownloadsError", err)
+	}
+}
+
+func TestCheckStatusRejectsInvalidIDsAndMultiItemArrays(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Simulate Torbox returning array of all torrents when invalid id is passed
+		_, _ = fmt.Fprint(w, `{"success":true,"data":[{"id":99,"name":"Other.mkv"},{"id":100,"name":"Another.mkv"}]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	tb := testTorbox(server.URL)
+
+	// Test id="0"
+	torrent0 := &types.Torrent{Id: "0"}
+	if _, err := tb.CheckStatus(torrent0); err == nil {
+		t.Fatal("CheckStatus(id=0) error = nil, want error")
+	}
+
+	// Test id="17" when Torbox returns array of items with different IDs
+	torrent17 := &types.Torrent{Id: "17"}
+	if _, err := tb.CheckStatus(torrent17); err == nil {
+		t.Fatal("CheckStatus(id=17) error = nil, want error on mismatch/multi-item array")
+	}
+}
+
+func TestGetAvailableSlotsComputesRemaining(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/user/me":
+			_, _ = fmt.Fprint(w, `{"success":true,"data":{"plan":2}}`) // Pro plan = 10 slots
+		case "/api/torrents/mylist":
+			// 8 active torrents
+			_, _ = fmt.Fprint(w, `{"success":true,"data":[{"id":1,"active":true},{"id":2,"active":true},{"id":3,"active":true},{"id":4,"active":true},{"id":5,"active":true},{"id":6,"active":true},{"id":7,"active":true},{"id":8,"active":true},{"id":9,"active":false}]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	tb := testTorbox(server.URL)
+	tb.config.MinimumFreeSlot = 1
+	slots, err := tb.GetAvailableSlots()
+	if err != nil {
+		t.Fatalf("GetAvailableSlots() error = %v", err)
+	}
+	// 10 total - 8 active - 1 min free slot = 1 available
+	if slots != 1 {
+		t.Fatalf("GetAvailableSlots() = %d, want 1", slots)
+	}
+}
+
 

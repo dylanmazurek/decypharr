@@ -20,10 +20,22 @@ type AvailableResponse APIResponse[map[string]struct {
 	Hash string `json:"hash"`
 }]
 
-type AddMagnetResponse APIResponse[struct {
-	Id   int    `json:"torrent_id"`
-	Hash string `json:"hash"`
-}]
+type AddMagnetData struct {
+	TorrentId int    `json:"torrent_id"`
+	Id        int    `json:"id"`
+	QueuedId  int    `json:"queued_id"`
+	Hash      string `json:"hash"`
+	Name      string `json:"name"`
+}
+
+func (d *AddMagnetData) GetTorrentID() int {
+	if d.TorrentId != 0 {
+		return d.TorrentId
+	}
+	return d.Id
+}
+
+type AddMagnetResponse APIResponse[AddMagnetData]
 
 type torboxInfo struct {
 	Id              int       `json:"id"`
@@ -101,7 +113,7 @@ func (r *InfoResponse) UnmarshalJSON(data []byte) error {
 	r.Data = nil
 
 	raw := bytes.TrimSpace(envelope.Data)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) || bytes.Equal(raw, []byte("{}")) {
 		return nil
 	}
 
@@ -110,7 +122,7 @@ func (r *InfoResponse) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(raw, &items); err != nil {
 			return fmt.Errorf("decode TorBox torrent array: %w", err)
 		}
-		if len(items) > 0 {
+		if len(items) == 1 && items[0].Id != 0 {
 			r.Data = &items[0]
 		}
 		return nil
@@ -120,7 +132,9 @@ func (r *InfoResponse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(raw, &item); err != nil {
 		return fmt.Errorf("decode TorBox torrent object: %w", err)
 	}
-	r.Data = &item
+	if item.Id != 0 {
+		r.Data = &item
+	}
 	return nil
 }
 

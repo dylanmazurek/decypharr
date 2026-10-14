@@ -1,0 +1,101 @@
+// Global injected Decypharr configuration
+declare global {
+  interface Window {
+    __DECYPHARR__?: {
+      urlBase?: string;
+      version?: string;
+      setupRequired?: boolean;
+      setupError?: string;
+      authEnabled?: boolean;
+      user?: string;
+      tokenOnly?: boolean;
+      needsAuth?: boolean;
+    };
+  }
+}
+
+export * from './meta';
+export * from './torrent';
+
+export interface BrowseItem {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  mod_time: string;
+  extension?: string;
+  can_delete?: boolean;
+  active_debrid?: string;
+  kind?: string;
+  infohash?: string;
+  info_hash?: string;
+}
+
+export interface BrowseResponse {
+  entries: BrowseItem[];
+  total: number;
+  page?: number;
+  limit?: number;
+  total_pages?: number;
+  current_dir: string;
+  parent_dir?: string;
+  current_kind?: string;
+}
+
+export interface EntryHealth {
+  entry_name: string;
+  status: 'healthy' | 'broken' | 'repairing' | 'missing' | 'unknown' | string;
+  protocol?: string;
+  file_count?: number;
+  broken_count?: number;
+  broken_files?: Array<{
+    file_name: string;
+    reason: string;
+    size?: number;
+    arr_name?: string;
+  }>;
+  failure_reason?: string;
+  dirty?: boolean;
+  last_checked_at?: string;
+  last_ok_at?: string;
+  last_failed_at?: string;
+  last_repair_at?: string;
+}
+
+export interface RepairCheckResult {
+  path: string;
+  status: 'ok' | 'corrupt' | 'missing' | 'error';
+  message?: string;
+  torrent_hash?: string;
+  torrent_name?: string;
+}
+
+export interface StatsData {
+  uptime?: number;
+  goroutines?: number;
+  memory_alloc?: number;
+  memory_total?: number;
+  memory_sys?: number;
+  active_downloads?: number;
+  active_uploads?: number;
+  download_speed?: number;
+  upload_speed?: number;
+  total_downloaded?: number;
+  total_uploaded?: number;
+  torrents_count?: number;
+  [key: string]: unknown;
+}
+
+export interface DebridAccountStatus {
+  service: string;
+  active: boolean;
+  username?: string;
+  email?: string;
+  premium?: boolean;
+  expiration?: string;
+  points?: number;
+}
+
+export interface DecypharrConfig {
+  [key: string]: any;
+}

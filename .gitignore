@@ -12,6 +12,8 @@ config.json
 *.test
 /nntpmock
 dist/
+!frontend/dist/
+!frontend/dist/index.html
 tmp/**
 torrents.json
 logs/**

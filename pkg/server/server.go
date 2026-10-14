@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/dylanmazurek/decypharr/frontend"
 	"github.com/dylanmazurek/decypharr/internal/config"
 	"github.com/dylanmazurek/decypharr/internal/logger"
 	"github.com/dylanmazurek/decypharr/pkg/manager"
@@ -25,57 +27,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const (
-	containerFrontendRoot = "/app/frontend"
-)
-
-var templateNames = []string{
-	"layout.html",
-	"setup_layout.html",
-	"index.html",
-	"download.html",
-	"repair.html",
-	"stats.html",
-	"config.html",
-	"browse.html",
-	"login.html",
-	"register.html",
-	"setup.html",
-}
-
-var optionalTemplateNames = []string{
-	"reacquire.html",
-	"repair_tabs.html",
-}
-
-func frontendRoot() string {
-	candidates := []string{
-		containerFrontendRoot,
-		"frontend",
-		filepath.Join("..", "..", "frontend"),
-	}
-	for _, root := range candidates {
-		if st, err := os.Stat(root); err == nil && st.IsDir() {
-			return root
-		}
-	}
-	// Fall back to the repository-relative default to preserve prior behavior.
-	return filepath.Join("..", "..", "frontend")
-}
-
 func parseTemplatesFromFrontend() (*template.Template, error) {
-	root := frontendRoot()
-	templatePaths := make([]string, 0, len(templateNames)+len(optionalTemplateNames))
-	for _, name := range templateNames {
-		templatePaths = append(templatePaths, filepath.Join(root, "templates", name))
-	}
-	for _, name := range optionalTemplateNames {
-		path := filepath.Join(root, "templates", name)
-		if st, err := os.Stat(path); err == nil && !st.IsDir() {
-			templatePaths = append(templatePaths, path)
-		}
-	}
-	return template.ParseFiles(templatePaths...)
+	return template.New("empty"), nil
 }
 
 type AddRequest struct {
@@ -107,6 +60,7 @@ type Server struct {
 	stats        *stats.Collector
 	cookie       *sessions.CookieStore
 	templates    *template.Template
+	frontendFS   fs.FS
 	nzbUserAgent string
 	urlBase      string
 	restartFunc  func()
@@ -122,6 +76,7 @@ func New(mgr *manager.Manager) *Server {
 	cfg := config.Get()
 
 	templates := template.Must(parseTemplatesFromFrontend())
+	frontendFS, _ := frontend.FS()
 	cookieStore := sessions.NewCookieStore([]byte(cfg.SecretKey()))
 	cookieStore.Options = &sessions.Options{
 		Path:     "/",
@@ -132,12 +87,13 @@ func New(mgr *manager.Manager) *Server {
 	statsCollector := stats.New(mgr)
 
 	s := &Server{
-		logger:    l,
-		manager:   mgr,
-		stats:     statsCollector,
-		cookie:    cookieStore,
-		templates: templates,
-		urlBase:   cfg.URLBase,
+		logger:     l,
+		manager:    mgr,
+		stats:      statsCollector,
+		cookie:     cookieStore,
+		templates:  templates,
+		frontendFS: frontendFS,
+		urlBase:    cfg.URLBase,
 	}
 
 	qb := qbit.New(mgr)
